@@ -1,0 +1,247 @@
+---
+title: <font size = "20"><b>Assignment2 - Github APIs</b></font>
+author: <font size = "10"><b>Ayush Shah</b></font>
+date: <font size = "10">4/2/2021</font>
+output: 
+  html_document:
+    code_folding: "show"
+  
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+> ### In this assignment, we extract details of the user **gimite** from github and visualize a couple of interesting facts from the extracted data.
+
+---
+
+## **User Description:** 
+### Hiroshi Ichikawa is software enthusiast from Japan with 211 [followers](https://github.com/gimite?tab=followers), 34 [repositories](https://github.com/gimite?tab=repositories) and goes by the user ID [gimite](https://github.com/gimite)
+## **User URL:** 
+### https://github.com/gimite
+
+---
+
+---
+## Importing the required libraries
+
+```{r}
+library(gh)
+library(tibble)
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(foreach)
+library(jsonlite)
+library(purrr)
+library(ggplot2)
+```
+
+## Acquiring token to get a higher API rate limit
+
+```{r}
+my_token = "543ae9ab6c41b34cc920b487f40f59c9b6fbbc5f"
+Sys.setenv(GITHUB_TOKEN = my_token)
+
+```
+## Table 1 - User Information
+
+> ### Contains the User Name, User Login, User ID, Public Repositories and the number of followers
+
+```{r}
+
+gimite <- gh("/users/gimite")
+
+gimite_basic_details <- tibble(User_Name = gimite$name, User_Login = gimite$login, User_Id = gimite$id,  
+                    Repositories = gimite$public_repos, Followers = gimite$followers)
+kable(gimite_basic_details, caption = "__Basic User Details__", align = "l")
+
+```
+## Table 2 - User's followers' information
+
+> ### Contains the User's followers' IDs, Names, their number of public repositories and the number of their followers
+
+```{r}
+
+#gimite_followers <- gh("/users/gimite/followers", .limit =Inf)
+
+#names_of_followers <- map_chr(gimite_followers, function(x){x$login})
+
+#ids_of_followers <- map_int(gimite_followers, function(x){x$id})
+
+#followers_public_repos = map_int(names_of_followers, function(x){
+ # individual = gh(paste("/users/", x, sep = ""))
+  #return (individual$public_repos)
+#})
+
+
+#followers_followers = map_int(names_of_followers, function(x){
+ # individual = gh(paste("/users/", x, sep = ""))
+  #return (individual$followers)
+#})
+
+
+#gimite_follower_details = data.frame(
+ # Follower_ID = ids_of_followers,
+  #Follower_Name = names_of_followers,
+  #Follower_Public_Repos = followers_public_repos,
+  #Follower_Followers = followers_followers
+#)
+
+#kable(head(gimite_follower_details,5), caption = "__Follower Details__", align = "l")
+
+```
+## Table 3 - User's Repositories' details
+
+> ### Consists of repository name, language used, size, forks count, stargazers count, watchers count and open issues count.  We also handle missing values in 'Language' column by assigning NA
+
+```{r}
+gimite_repos <- gh("/users/gimite/repos", .limit =Inf)
+
+gimite_repos_names <- map_chr(gimite_repos, function(x){
+  x$name
+})
+
+gimite_repos_language <- map(gimite_repos, function(x){
+  val <- x$language; replace(val, is.null(val), NA)
+  return (val)
+})
+
+gimite_repos_size <- map_chr(gimite_repos, function(x){
+  x$size
+})
+
+gimite_forks_count <- map_chr(gimite_repos, function(x){
+  x$forks_count
+})
+
+gimite_stargazers_count <- map_int(gimite_repos, function(x){
+  x$stargazers_count
+})
+
+gimite_watchers_count <- map_chr(gimite_repos, function(x){
+  x$watchers_count
+})
+
+gimite_open_issues <- map_chr(gimite_repos, function(x){
+  x$open_issues_count
+})
+
+gimite_repos_language[sapply(gimite_repos_language, function(x) length(x)==0L)] <- NA
+
+gimite_repos_language_value = unlist(gimite_repos_language)
+
+
+gimite_repo_info = data.frame(
+  "Name" = gimite_repos_names,
+  "Language" = gimite_repos_language_value,
+  "Size" = gimite_repos_size,
+  "Forks_Count" = gimite_forks_count,
+  "Stargazers_Count" = gimite_stargazers_count,
+  "Watchers_Count" = gimite_watchers_count,
+  "Open_Issues_Count" = gimite_open_issues
+)
+kable(head(gimite_repo_info,5), caption = "__Repository Details__", align = "l")
+```
+## Table 4 - Summary of Issues
+
+> ### Consists of repository name, number of open issues in that repository, closed issues and average time taken to close an issue in that repository (in hours)
+
+number of open issues for each repository:
+```{r}
+gimite_n_of_open_issues = map_int(gimite_repos_names, function(x){
+  open_issues = gh(paste("/repos/gimite/", x, "/issues?state=open", sep = ""))
+  return (nrow(map_df(open_issues, magrittr::extract, c("state"))))
+})
+```
+
+number of closed issues for each repository:
+```{r}
+gimite_n_of_closed_issues = map_int(gimite_repos_names, function(x){
+  closed_issues = gh(paste("/repos/gimite/", x, "/issues?state=closed", sep = ""))
+  return (nrow(map_df(closed_issues, magrittr::extract, c("state"))))
+})
+```
+
+List containing issues with created_at dates and closed_at dates of issues in all repositories:
+```{r}
+gimite_issues_list = map(gimite_repos_names, function(x){
+  issues = gh(paste("/repos/gimite/", x, "/issues?state=closed", sep = ""))
+  return (map_df(issues, magrittr::extract, c("id", "created_at", "closed_at","state"))
+  )
+})
+```
+
+List to get the average time taken to close issues in each repository:
+```{r}
+avg_time<- map(gimite_issues_list, function(x){
+  summer = 0
+  for (i in nrow(x)){
+    per_issue = as.numeric(difftime(strptime(x$closed_at[i],"%Y-%m-%dT%H:%M:%SZ"),
+                          strptime(x$created_at[i],"%Y-%m-%dT%H:%M:%SZ")),unit = "hours")
+    summer = summer + as.numeric(per_issue)
+  }
+  return (round((summer/nrow(x)),5))
+})
+```
+
+Converting list to numeric to handle empty cells:
+```{r}
+avg_numeric = as.numeric(avg_time)
+```
+
+Final table 4:
+```{r}
+gimite_issue_summary = tibble(
+  "Repo_Name" = gimite_repos_names,
+  "Open_Issues" = gimite_n_of_open_issues,
+  "Closed_Issues" = gimite_n_of_closed_issues,
+  "Avg_Hours_To_Close" = avg_numeric
+)
+
+gimite_issue_summary[is.na(gimite_issue_summary)] <- 0
+
+kable(head(gimite_issue_summary,5), caption = "__Issues Summary__", align = "l")
+```
+
+__Displaying some other rows:__
+```{r}
+kable(gimite_issue_summary[19:23,], caption = "__Issues Summary__", align = "l")
+
+```
+## __VISUALIZATIONS:__
+
+### __Part 1: Getting to know the language Hiroshi Ichikawa uses MOST for his projects __
+### First is a bar graph
+```{r}
+ggplot(gimite_repo_info,  aes(x = factor(""), fill = Language) ) +
+  geom_bar()+
+  scale_fill_brewer(palette="Yellow")
+```
+
+
+## Below is the same plot but with polar system:
+```{r}
+ggplot(gimite_repo_info,
+  aes(x = factor(""), fill = Language) ) +
+scale_fill_brewer(palette="Yellow")+
+  geom_bar() +
+  coord_polar(theta = "y") +
+  scale_x_discrete("")+
+  theme_minimal()
+```
+## From the above 2 simple plots, we can decuce that Hiroshi Ichikawa's most repositories have been in the language - __Ruby__
+
+---
+--- 
+## __Part 2: __ Closed issues VS Open Issues: Shows the average time to close an issue in the form of a plot
+
+```{r}
+gimite_issue_summary %>%
+  ggplot(aes(x = Open_Issues,
+             y = Closed_Issues, col = Open_Issues
+            , size = avg_numeric)) +
+  geom_point(alpha = 4) + stat_smooth(method = "lm")
+```
