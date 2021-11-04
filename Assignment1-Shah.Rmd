@@ -1,0 +1,93 @@
+---
+title: "Assignment 1: Exploring XML data"
+author: "Ayush Shah"
+date: "8/21/2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+___
+
+## Description
+
+In this assignment, we  explore data from the website <https://www.federalregister.gov/> for the file <https://www.govinfo.gov/bulkdata/FR/2021/08/FR-2021-08-13.xml>
+
+
+## Libraries and import data
+##### (To view, select 'code' -->)
+
+```{r 0, message=FALSE, echo=TRUE, results='hide'}
+library(xml2)
+library(tidyverse)
+library(knitr)
+library(ggplot2)
+
+xml <- read_xml("https://www.govinfo.gov/bulkdata/FR/2021/08/FR-2021-08-13.xml")
+```
+
+## 1. Number of unique agencies in 'CNTNTS'
+
+```{r 1}
+
+length(unique(xml_find_all(xml, '/FEDREG/CNTNTS/AGCY/HD/text()')))
+
+```
+
+## 2. Categories of Announcements
+
+```{r 2}
+category = xml_text(xml_find_all(xml, "//CNTNTS/AGCY/CAT/HD"))
+cat_df = as.data.frame(category)
+cat_df = cat_df %>% group_by(category) %>% tally()
+
+kable(cat_df, caption = "Number of Categories")
+```
+```{r fig.align='center'}
+
+ggplot(cat_df, aes(x = category, y = n, color= category)) + 
+  geom_bar(stat='identity', fill= "white")+
+  ggtitle("Number of Categories of Announcements")
+
+```
+
+## 3. Agencies that made a notice in the category 'PROPOSED RULES'
+
+```{r 3}
+
+agencies = xml_find_all(xml, "//AGCY[CAT/HD/text() = 'PROPOSED RULES']/HD/text()")
+xml_text(agencies)
+
+```
+
+## 4. SUBJECT of the second RULE
+
+```{r 4}
+subject <- xml_find_all(xml, '/FEDREG/RULES/RULE[2]/PREAMB/SUBJECT/text()')
+xml_text(subject)
+
+```
+
+## 5. SUBJECT of NOTICES by 'Centers for Disease Control and Prevention'
+
+```{r 5}
+subjects = xml_find_all(xml, "//PREAMB[SUBAGY/text() = 'Centers for Disease Control and Prevention']/SUBJECT/text()")
+xml_text(subjects)
+
+```
+
+## 6. Top AGENCY with more than 5 notices
+
+```{r, 6}
+notice = xml_text(xml_find_all(xml, "//NOTICES/NOTICE/PREAMB/AGENCY"))
+notice_df = as.data.frame(notice) %>% group_by(notice) %>% tally()
+notice_df = notice_df[notice_df$n > 5,]
+kable(notice_df, caption = "Agencies with more than 5 notices")
+```
+```{r fig.align='center', fig.width=20, fig.height=14}
+ggplot(notice_df, aes(x=notice, y=n, fill= notice))+
+ggtitle("Agencies with >5 NOTICES")+
+geom_bar(stat="identity", color="black")+
+scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9", "#468295", "#382093", "#129458"))+
+  theme(text = element_text(size=20), axis.text.x = element_text(angle=15, hjust=1)) 
+
+```
