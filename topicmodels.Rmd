@@ -1,0 +1,324 @@
+---
+title: "1. Assignment 2: Topic Modelling"
+author: "Ayush Shah"
+date: "9/8/2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+___
+
+## 2. Description
+
+In this assignment, we will use different topic modelling techniques to review the news description from The Indian Express. The csv file can be found [here](https://www.kaggle.com/pulkitkomal/news-article-data-set-from-indian-express). The dataset contains a total of 20000 articles posted from August 11, 2019 to June 08, 2020. The following are the columns in the dataset:
+
+article_id: ID of the article.
+
+headline: headline of the article.
+
+desc: description of the article
+
+date: date and time of the article
+
+url: url of the article
+
+articles: full article
+
+article_type: short, mid, long values to show the length of the article.
+
+article_length: length of the article.
+
+> In this assignment, we will use the columns 'article_id', 'article_length' and the **'desc'** column to analyse text.
+
+```{r}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+---
+
+## Libraries
+To see the full list, select 'code' -->
+
+```{r 0}
+library(topicmodels)
+library(quanteda)
+library(tidyverse)
+library(tidytext)
+library(topicdoc)
+library(LDAvis)
+library(dplyr)
+library(purrr)
+library(quanteda.textplots)
+library(LDAvis)
+library(ldatuning)
+library(broom)
+library(ggplot2)
+library(keyATM)
+library(stm)
+library(knitr)
+```
+
+---
+
+## Importing and forming data frame
+In this step, we also clean the 'id' column and remove unwanted columns:
+
+```{r 1}
+news_df <- readtext::readtext("Assignment2.csv", 
+                            text_field = "desc", docid_field = "article_id")
+
+news_df$doc_id <- gsub("INDEXP","", news_df$doc_id)
+
+news_df = news_df %>%
+  select(-c(V1, date, articles, article_type, url))
+kable(head(news_df), caption = "News Dataframe")
+```
+
+---
+
+## 3. Corpus, Tokens and Document Feature Matrix
+We do not include, padding = TRUE as we do not need positional analysis
+
+```{r 2}
+news_corp <- corpus(news_df)
+news_toks <- tokens(
+  news_corp,
+  remove_punct = TRUE,
+  remove_numbers = TRUE,
+  remove_symbols = TRUE,
+  remove_url = TRUE,
+  split_hyphens = FALSE)
+
+myStopWords = c("Where", "when", "shall", "include", "including", "by",
+                "includes", "included", "may", "uses", "using", "used", "may",
+                "also", "can", "whether", "so", "however", "rather", "â", "s",
+                "said", "one", "two", "three", "k")
+
+news_toks_final = tokens_remove(news_toks, pattern = c(stopwords("en"), myStopWords))
+
+
+news_dfm <- dfm(news_toks_final, tolower = TRUE) %>%
+  dfm_remove(c(stopwords("en"), myStopWords)) %>%
+  dfm_trim(min_termfreq = 3, min_docfreq = 10)
+news_dfm
+
+kable(topfeatures(news_dfm, 10), caption = "Top Features")
+```
+
+---
+
+**Semantic Network Analysis:**
+
+The plot below gives a very rough idea that many news articles around 'ministers','modi' and 'lottery'
+```{r 3}
+news_dfm_small <- dfm_trim(news_dfm, min_termfreq = 100)
+news_fcm <- fcm(news_dfm_small)
+
+feat <- names(topfeatures(news_fcm, 30))
+fcmat_select <- fcm_select(news_fcm, pattern = feat, selection = "keep")
+
+size <- log(colSums(dfm_select(news_fcm, feat, selection = "keep")))
+set.seed(123)
+textplot_network(fcmat_select, min_freq = 0.5, edge_size = 2, edge_color = "red",
+vertex_size = size/max(size)*3)
+```
+
+---
+
+## 4. Keywords-in-context analysis for the words 'economy', 'bribe' and 'modi' (The Prime Minister's name is Narendra Modi)
+
+```{r 4}
+keyword1 <- kwic(news_toks_final, pattern = phrase("economy*"), window = 3)
+kable(head(keyword1, 5))
+
+keyword2 <- kwic(news_toks_final, pattern = phrase("bribe*"), window = 3)
+kable(head(keyword2, 5))
+
+keyword3 <- kwic(news_toks_final, pattern = phrase("modi*"), window = 3)
+kable(head(keyword3, 5))
+```
+
+---
+
+## 5. LDA
+
+**LDA with 5 topics**
+
+```{r 5}
+news_dtmat = quanteda::convert(news_dfm, to="topicmodels")
+news_lda5 <- LDA(news_dtmat, k = 5, control = list(seed = 123))
+kable(terms(news_lda5, 10), caption = "Top terms in topics")
+```
+
+**Top 5 words in each topic:**
+
+```{r 6}
+news_lda5_betas <- broom::tidy(news_lda5)
+
+top_terms_in_topics <- news_lda5_betas %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms_in_topics %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+```
+
+**Best number of topics based on perplexity:**
+
+To know this we take the training set for article_length > 1500 (~15697 documents) and remaining to test the documents.
+
+```{r 7}
+test = subset(news_df, news_df$article_length > 1500)
+nrow(test)
+```
+
+**Testing and Training:** (code: -->)
+
+```{r}
+train_news_dtmat <- corpus_subset(news_corp, article_length > 1500) %>%
+  tokens(remove_punct = TRUE, remove_numbers = TRUE,
+         remove_symbols = TRUE, remove_url = TRUE) %>%
+  dfm(tolower = TRUE) %>%
+  dfm_remove(c(stopwords("en"), myStopWords)) %>%
+  dfm_trim(min_termfreq = 5, min_docfreq = 10) %>%
+  quanteda::convert(to="topicmodels")
+
+test_news_dtmat <- corpus_subset(news_corp, article_length <= 1500) %>%
+  tokens(remove_punct = TRUE, remove_numbers = TRUE,
+         remove_symbols = TRUE, remove_url = TRUE) %>%
+  dfm(tolower = TRUE) %>%
+  dfm_remove(c(stopwords("en"), myStopWords)) %>%
+  dfm_trim(min_termfreq = 5, min_docfreq = 10) %>%
+  quanteda::convert(to="topicmodels")
+```
+
+**Based on the perplexity vs n_topics graph, we see that the ideal number for the model is 2 topics:**
+
+```{r 8}
+n_topics_vec = 2:5
+perplexity_vec = map_dbl(n_topics_vec, function(kk) {
+  message(kk)
+  train_news_ldaK <- LDA(train_news_dtmat, k = kk, control = list(seed = 123))
+  perp = perplexity(train_news_ldaK, test_news_dtmat)
+})
+
+lda_perplexity_result = tibble(
+  n_topics = n_topics_vec, perplexity = perplexity_vec
+)
+
+plot(lda_perplexity_result, type="l")
+```
+
+**LDA tuning and fitting model with best number of topics:** (code -->)
+
+```{r 9, message=FALSE, results='hide'}
+lda_ldatuning_result <- FindTopicsNumber(
+  news_dtmat, topics = n_topics_vec,
+  metrics = c("CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "VEM", control = list(seed = 123), mc.cores = 4L, verbose = TRUE
+)
+```
+
+**CaoJuan2009, Arun2010 and Deveaud2014 metrics plot:**
+
+```{r 10}
+FindTopicsNumber_plot(lda_ldatuning_result)
+```
+
+**We see that the Deveaud2014 value is highest for 2 topics to give the best LDA model.**
+
+**Below is the model with 2 topics and its diagnostics:**
+
+```{r 11}
+news_lda2 <- LDA(news_dtmat, k = 2, control = list(seed = 123))
+topicdoc_result2 = topic_diagnostics(news_lda2, news_dtmat)
+kable(topicdoc_result2, caption = "Diagnostics")
+```
+
+---
+
+## 6. STM
+**STM model with 5 topics:**
+
+(We have set the prevalence according to the 'article_length' and have set the maximum number of iterations to 75 which takes ~19 minutes to run)
+
+```{r 12, message=FALSE, results = 'hide'}
+stm_newsdfmat <- quanteda::convert(news_dfm, to = "stm")
+out <- prepDocuments(
+  stm_newsdfmat$documents, stm_newsdfmat$vocab, stm_newsdfmat$meta)
+
+news_tmob_stm <- stm(
+  out$documents, out$vocab, K=5,
+  prevalence = ~s(article_length),
+  data=out$meta,
+  init.type= "Spectral",
+  max.em.its=75,
+  seed=123)
+```
+
+**Summary plot of model:**
+
+```{r 13, fig.height=5, fig.width=10}
+plot(news_tmob_stm, type="summary", n=5)
+```
+
+**Quality of Topics:**
+
+```{r 14, results = 'hide', message = FALSE, fig.height=5, fig.width=10}
+topicQuality(news_tmob_stm, out$documents)
+```
+
+**Interpretation of the above results:**
+
+ > From the summary plot, we see that topic 2 has words like'india', 'government', 'modi' and 'kashmir'. The ruling party's manifesto for 2019 had an important decision regarding the state of kashmir that year. Thus it is natural to see the occurences of related words. Other words from topics give an idea that most news revloved around the government, BJP (ruling party), chief ministers of states and also a good number of articles were about and around money ('rs' is the currency symbol of India, 'lakh' is 100,000) (from topic 5)
+ 
+> From the topicQuality(), we can see that Topic 5 has the highest 'Exclusivity' but low 'Semantic Coherence' whereas Topic 4 has the highest 'Semantic Coherence' but relatively low 'Exclusivity'.
+
+---
+
+## 7. Keyword Assisted Topic Model:
+
+**Reading data from the Document Feature Matrix:**
+
+```{r 15}
+keyATM_docs <- keyATM_read(texts = news_dfm)
+summary(keyATM_docs)
+```
+
+**Creating 3 sets of keywords:**
+
+```{r 16}
+news_key_list = list(
+  law = c("police", "crime", "bribe", "official", "officials", 
+           "meetings","justice","party","shah"),
+  govt = c("citizenship", "modi", "minister", "chief", "congress", "bjp", "singh",
+           "opposition", "lottery","jammu","pakistan"),
+  corona = c("covid-19","lockdown", "virus", "death", "cases", "relief", "vaccine")
+)
+
+news_key_viz <- visualize_keywords(docs = keyATM_docs, keywords = news_key_list)
+news_key_viz
+```
+
+**keyATM Base model with keyword sets and 3 no-keyword topics:**
+
+```{r 17}
+news_tmod_keyatm_base <- keyATM(
+  docs = keyATM_docs, 
+  no_keyword_topics = 3, 
+  keywords = news_key_list, 
+  model = "base", 
+  options = list(seed = 123))
+```
+
+**Top 5 keywords in each topic:**
+
+```{r 18}
+kable(top_words(news_tmod_keyatm_base, 5), caption = "Top 5 keywords")
+```

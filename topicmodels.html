@@ -1,0 +1,846 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html><head></head><body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div>
+
+<div class="btn-group pull-right float-right">
+<span>Code</span> <span class="caret"></span>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a rel="noopener" href="#">Show All Code</a></li>
+<li><a rel="noopener" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">1. Assignment 2: Topic Modelling</h1>
+<h4 class="author">Ayush Shah</h4>
+<h4 class="date">9/8/2021</h4>
+
+</div>
+
+
+<hr/>
+<div class="section level2">
+<h2>2. Description</h2>
+<p>In this assignment, we will use different topic modelling techniques to review the news description from The Indian Express. The csv file can be found <a rel="noopener" href="https://www.kaggle.com/pulkitkomal/news-article-data-set-from-indian-express">here</a>. The dataset contains a total of 20000 articles posted from August 11, 2019 to June 08, 2020. The following are the columns in the dataset:</p>
+<p>article_id: ID of the article.</p>
+<p>headline: headline of the article.</p>
+<p>desc: description of the article</p>
+<p>date: date and time of the article</p>
+<p>url: url of the article</p>
+<p>articles: full article</p>
+<p>article_type: short, mid, long values to show the length of the article.</p>
+<p>article_length: length of the article.</p>
+<blockquote>
+<p>In this assignment, we will use the columns ‘article_id’, ‘article_length’ and the <strong>‘desc’</strong> column to analyse text.</p>
+</blockquote>
+<pre class="r"><code>knitr::opts_chunk$set(message = FALSE, warning = FALSE)</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Libraries</h2>
+<p>To see the full list, select ‘code’ –&gt;</p>
+<pre class="r"><code>library(topicmodels)
+library(quanteda)
+library(tidyverse)
+library(tidytext)
+library(topicdoc)
+library(LDAvis)
+library(dplyr)
+library(purrr)
+library(quanteda.textplots)
+library(LDAvis)
+library(ldatuning)
+library(broom)
+library(ggplot2)
+library(keyATM)
+library(stm)
+library(knitr)</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Importing and forming data frame</h2>
+<p>In this step, we also clean the ‘id’ column and remove unwanted columns:</p>
+<pre class="r"><code>news_df &lt;- readtext::readtext(&quot;Assignment2.csv&quot;, 
+                            text_field = &quot;desc&quot;, docid_field = &quot;article_id&quot;)
+
+news_df$doc_id &lt;- gsub(&quot;INDEXP&quot;,&quot;&quot;, news_df$doc_id)
+
+news_df = news_df %&gt;%
+  select(-c(V1, date, articles, article_type, url))
+kable(head(news_df), caption = &quot;News Dataframe&quot;)</code></pre>
+<table style="width:100%;">
+<caption>News Dataframe</caption>
+<colgroup>
+<col width="1%"/>
+<col width="68%"/>
+<col width="25%"/>
+<col width="4%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">doc_id</th>
+<th align="left">text</th>
+<th align="left">headline</th>
+<th align="right">article_length</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">20000</td>
+<td align="left">The two were taken to a nearby hospital in Kamakhyanagar, where doctors declared them dead, Nayak said.</td>
+<td align="left">Trainer aircraft crashes in Odisha, 2 killed</td>
+<td align="right">753</td>
+</tr>
+<tr class="even">
+<td align="left">19999</td>
+<td align="left">All hotels/ B&amp;B/ Homestay &amp; hospitality services shall be allowed to resume in areas, barring the containment zones and municipal area of Dehradun till further orders, the notification read.</td>
+<td align="left">Uttarkhand unlock 1.0: Hotel bookings for minimum 7 days, guests cannot visit tourist spots</td>
+<td align="right">2424</td>
+</tr>
+<tr class="odd">
+<td align="left">19998</td>
+<td align="left">The gunfight comes a day after five militants were killed in an encounter in Reban village of Shopian district on Sunday.</td>
+<td align="left">J-K: Four Hizbul militants killed in Shopian encounter; 9 in last 24 hours</td>
+<td align="right">1088</td>
+</tr>
+<tr class="even">
+<td align="left">19997</td>
+<td align="left">Mumbai Traffic Police have prepared for a surge in vehicular traffic on roads considering the state&#226;€™s phased easing of the lockdown.</td>
+<td align="left">Mumbai offices to reopen today, with curbs</td>
+<td align="right">1802</td>
+</tr>
+<tr class="odd">
+<td align="left">19996</td>
+<td align="left">Faesal and two PDP leaders&#226;€”Peer Mansoor and Sartaj Madni&#226;€”were released from detention on June 3. However, according to official sources, Faesal has been placed under house arrest alongside almost a dozen other political leaders.</td>
+<td align="left">PDP, NC, PC call for release of all J&amp;K leaders</td>
+<td align="right">3045</td>
+</tr>
+<tr class="even">
+<td align="left">19995</td>
+<td align="left">In first remarks after the marathon meeting Saturday between Indian and Chinese army commanders at the Chushul-Moldo border point, the Ministry of External Affairs, in a statement, said it &#226;€œtook place in a cordial and positive atmosphere&#226;€.</td>
+<td align="left">Delhi prepares for long haul: Military, diplomatic engagements to continue</td>
+<td align="right">5857</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+</div>
+<div class="section level2">
+<h2>3. Corpus, Tokens and Document Feature Matrix</h2>
+<p>We do not include, padding = TRUE as we do not need positional analysis</p>
+<pre class="r"><code>news_corp &lt;- corpus(news_df)
+news_toks &lt;- tokens(
+  news_corp,
+  remove_punct = TRUE,
+  remove_numbers = TRUE,
+  remove_symbols = TRUE,
+  remove_url = TRUE,
+  split_hyphens = FALSE)
+
+myStopWords = c(&quot;Where&quot;, &quot;when&quot;, &quot;shall&quot;, &quot;include&quot;, &quot;including&quot;, &quot;by&quot;,
+                &quot;includes&quot;, &quot;included&quot;, &quot;may&quot;, &quot;uses&quot;, &quot;using&quot;, &quot;used&quot;, &quot;may&quot;,
+                &quot;also&quot;, &quot;can&quot;, &quot;whether&quot;, &quot;so&quot;, &quot;however&quot;, &quot;rather&quot;, &quot;&#226;&quot;, &quot;s&quot;,
+                &quot;said&quot;, &quot;one&quot;, &quot;two&quot;, &quot;three&quot;, &quot;k&quot;)
+
+news_toks_final = tokens_remove(news_toks, pattern = c(stopwords(&quot;en&quot;), myStopWords))
+
+
+news_dfm &lt;- dfm(news_toks_final, tolower = TRUE) %&gt;%
+  dfm_remove(c(stopwords(&quot;en&quot;), myStopWords)) %&gt;%
+  dfm_trim(min_termfreq = 3, min_docfreq = 10)
+news_dfm</code></pre>
+<pre><code>## Document-feature matrix of: 20,000 documents, 4,917 features (99.72% sparse) and 2 docvars.
+##        features
+## docs    taken nearby hospital doctors declared dead hotels b services allowed
+##   20000     1      1        1       1        1    1      0 0        0       0
+##   19999     0      0        0       0        0    0      1 2        1       1
+##   19998     0      0        0       0        0    0      0 0        0       0
+##   19997     0      0        0       0        0    0      0 0        0       0
+##   19996     0      0        0       0        0    0      0 0        0       0
+##   19995     0      0        0       0        0    0      0 0        0       0
+## [ reached max_ndoc ... 19,994 more documents, reached max_nfeat ... 4,907 more features ]</code></pre>
+<pre class="r"><code>kable(topfeatures(news_dfm, 10), caption = &quot;Top Features&quot;)</code></pre>
+<table>
+<caption>Top Features</caption>
+<thead>
+<tr class="header">
+<th align="left"></th>
+<th align="right">x</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">government</td>
+<td align="right">2293</td>
+</tr>
+<tr class="even">
+<td align="left">minister</td>
+<td align="right">2197</td>
+</tr>
+<tr class="odd">
+<td align="left">state</td>
+<td align="right">2104</td>
+</tr>
+<tr class="even">
+<td align="left">police</td>
+<td align="right">1937</td>
+</tr>
+<tr class="odd">
+<td align="left">chief</td>
+<td align="right">1512</td>
+</tr>
+<tr class="even">
+<td align="left">india</td>
+<td align="right">1463</td>
+</tr>
+<tr class="odd">
+<td align="left">court</td>
+<td align="right">1452</td>
+</tr>
+<tr class="even">
+<td align="left">people</td>
+<td align="right">1282</td>
+</tr>
+<tr class="odd">
+<td align="left">rs</td>
+<td align="right">1275</td>
+</tr>
+<tr class="even">
+<td align="left">congress</td>
+<td align="right">1137</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+<p><strong>Semantic Network Analysis:</strong></p>
+<p>The plot below gives a very rough idea that many news articles around ‘ministers’,‘modi’ and ‘lottery’</p>
+<pre class="r"><code>news_dfm_small &lt;- dfm_trim(news_dfm, min_termfreq = 100)
+news_fcm &lt;- fcm(news_dfm_small)
+
+feat &lt;- names(topfeatures(news_fcm, 30))
+fcmat_select &lt;- fcm_select(news_fcm, pattern = feat, selection = &quot;keep&quot;)
+
+size &lt;- log(colSums(dfm_select(news_fcm, feat, selection = &quot;keep&quot;)))
+set.seed(123)
+textplot_network(fcmat_select, min_freq = 0.5, edge_size = 2, edge_color = &quot;red&quot;,
+vertex_size = size/max(size)*3)</code></pre>
+<p><img src="javascript://" width="672"/></p>
+<hr/>
+</div>
+<div class="section level2">
+<h2>4. Keywords-in-context analysis for the words ‘economy’, ‘bribe’ and ‘modi’ (The Prime Minister’s name is Narendra Modi)</h2>
+<pre class="r"><code>keyword1 &lt;- kwic(news_toks_final, pattern = phrase(&quot;economy*&quot;), window = 3)
+kable(head(keyword1, 5))</code></pre>
+<table style="width:100%;">
+<colgroup>
+<col width="9%"/>
+<col width="5%"/>
+<col width="3%"/>
+<col width="33%"/>
+<col width="9%"/>
+<col width="28%"/>
+<col width="10%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">docname</th>
+<th align="right">from</th>
+<th align="right">to</th>
+<th align="left">pre</th>
+<th align="left">keyword</th>
+<th align="left">post</th>
+<th align="left">pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">19781</td>
+<td align="right">7</td>
+<td align="right">7</td>
+<td align="left">come amid contraction</td>
+<td align="left">economy</td>
+<td align="left">due coronavirus pandemic</td>
+<td align="left">economy*</td>
+</tr>
+<tr class="even">
+<td align="left">19721</td>
+<td align="right">3</td>
+<td align="right">3</td>
+<td align="left">definitely decimated</td>
+<td align="left">economy</td>
+<td align="left">flattened wrong curve</td>
+<td align="left">economy*</td>
+</tr>
+<tr class="odd">
+<td align="left">19707</td>
+<td align="right">11</td>
+<td align="right">11</td>
+<td align="left">little signs picking</td>
+<td align="left">economy</td>
+<td align="left">just attempting revival</td>
+<td align="left">economy*</td>
+</tr>
+<tr class="even">
+<td align="left">19578</td>
+<td align="right">4</td>
+<td align="right">4</td>
+<td align="left">prime minister strengthening</td>
+<td align="left">economy</td>
+<td align="left">top priorities alongside</td>
+<td align="left">economy*</td>
+</tr>
+<tr class="odd">
+<td align="left">19345</td>
+<td align="right">4</td>
+<td align="right">4</td>
+<td align="left">crippling effect Covid-19</td>
+<td align="left">economy</td>
+<td align="left">create challenges make</td>
+<td align="left">economy*</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>keyword2 &lt;- kwic(news_toks_final, pattern = phrase(&quot;bribe*&quot;), window = 3)
+kable(head(keyword2, 5))</code></pre>
+<table>
+<colgroup>
+<col width="8%"/>
+<col width="5%"/>
+<col width="3%"/>
+<col width="31%"/>
+<col width="8%"/>
+<col width="34%"/>
+<col width="8%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">docname</th>
+<th align="right">from</th>
+<th align="right">to</th>
+<th align="left">pre</th>
+<th align="left">keyword</th>
+<th align="left">post</th>
+<th align="left">pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">19163</td>
+<td align="right">17</td>
+<td align="right">17</td>
+<td align="left">person heard œoffering</td>
+<td align="left">bribe&#226;</td>
+<td align="left">œruling party leader&#226;</td>
+<td align="left">bribe*</td>
+</tr>
+<tr class="even">
+<td align="left">18972</td>
+<td align="right">10</td>
+<td align="right">10</td>
+<td align="left">vigilance officials Wednesday</td>
+<td align="left">bribery</td>
+<td align="left">charges following investigations</td>
+<td align="left">bribe*</td>
+</tr>
+<tr class="odd">
+<td align="left">14703</td>
+<td align="right">9</td>
+<td align="right">9</td>
+<td align="left">CBI charge sheet</td>
+<td align="left">bribery</td>
+<td align="left">case agency recently</td>
+<td align="left">bribe*</td>
+</tr>
+<tr class="even">
+<td align="left">13183</td>
+<td align="right">10</td>
+<td align="right">10</td>
+<td align="left">DSP Devender Kumar</td>
+<td align="left">bribery</td>
+<td align="left">extortion case Tuesday</td>
+<td align="left">bribe*</td>
+</tr>
+<tr class="odd">
+<td align="left">11928</td>
+<td align="right">17</td>
+<td align="right">17</td>
+<td align="left">Ludhiana arrested accepting</td>
+<td align="left">bribe</td>
+<td align="left">Rs Gurdeep Singh</td>
+<td align="left">bribe*</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>keyword3 &lt;- kwic(news_toks_final, pattern = phrase(&quot;modi*&quot;), window = 3)
+kable(head(keyword3, 5))</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">docname</th>
+<th align="right">from</th>
+<th align="right">to</th>
+<th align="left">pre</th>
+<th align="left">keyword</th>
+<th align="left">post</th>
+<th align="left">pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">19936</td>
+<td align="right">12</td>
+<td align="right">12</td>
+<td align="left">finally heard PM</td>
+<td align="left">Modi’s</td>
+<td align="left">appeal show gratitude</td>
+<td align="left">modi*</td>
+</tr>
+<tr class="even">
+<td align="left">19881</td>
+<td align="right">18</td>
+<td align="right">18</td>
+<td align="left">crore PM Narendra</td>
+<td align="left">Modi’s</td>
+<td align="left">visit cyclone-hit areas</td>
+<td align="left">modi*</td>
+</tr>
+<tr class="odd">
+<td align="left">19870</td>
+<td align="right">5</td>
+<td align="right">5</td>
+<td align="left">Ministry External Affairs</td>
+<td align="left">Modi</td>
+<td align="left">spoken leaders countries</td>
+<td align="left">modi*</td>
+</tr>
+<tr class="even">
+<td align="left">19777</td>
+<td align="right">4</td>
+<td align="right">4</td>
+<td align="left">Prime Minister Narendra</td>
+<td align="left">Modi</td>
+<td align="left">discussed situation India-China</td>
+<td align="left">modi*</td>
+</tr>
+<tr class="odd">
+<td align="left">19728</td>
+<td align="right">4</td>
+<td align="right">4</td>
+<td align="left">wish become famous</td>
+<td align="left">Modi</td>
+<td align="left">hug share samosas</td>
+<td align="left">modi*</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+</div>
+<div class="section level2">
+<h2>5. LDA</h2>
+<p><strong>LDA with 5 topics</strong></p>
+<pre class="r"><code>news_dtmat = quanteda::convert(news_dfm, to=&quot;topicmodels&quot;)
+news_lda5 &lt;- LDA(news_dtmat, k = 5, control = list(seed = 123))
+kable(terms(news_lda5, 10), caption = &quot;Top terms in topics&quot;)</code></pre>
+<table>
+<caption>Top terms in topics</caption>
+<thead>
+<tr class="header">
+<th align="left">Topic 1</th>
+<th align="left">Topic 2</th>
+<th align="left">Topic 3</th>
+<th align="left">Topic 4</th>
+<th align="left">Topic 5</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">delhi</td>
+<td align="left">state</td>
+<td align="left">rs</td>
+<td align="left">government</td>
+<td align="left">state</td>
+</tr>
+<tr class="even">
+<td align="left">government</td>
+<td align="left">minister</td>
+<td align="left">lakh</td>
+<td align="left">minister</td>
+<td align="left">case</td>
+</tr>
+<tr class="odd">
+<td align="left">india</td>
+<td align="left">police</td>
+<td align="left">police</td>
+<td align="left">police</td>
+<td align="left">court</td>
+</tr>
+<tr class="even">
+<td align="left">court</td>
+<td align="left">government</td>
+<td align="left">court</td>
+<td align="left">state</td>
+<td align="left">chief</td>
+</tr>
+<tr class="odd">
+<td align="left">country</td>
+<td align="left">india</td>
+<td align="left">india</td>
+<td align="left">first</td>
+<td align="left">minister</td>
+</tr>
+<tr class="even">
+<td align="left">singh</td>
+<td align="left">singh</td>
+<td align="left">chief</td>
+<td align="left">people</td>
+<td align="left">modi</td>
+</tr>
+<tr class="odd">
+<td align="left">home</td>
+<td align="left">chief</td>
+<td align="left">cases</td>
+<td align="left">congress</td>
+<td align="left">congress</td>
+</tr>
+<tr class="even">
+<td align="left">district</td>
+<td align="left">bjp</td>
+<td align="left">last</td>
+<td align="left">party</td>
+<td align="left">day</td>
+</tr>
+<tr class="odd">
+<td align="left">union</td>
+<td align="left">modi</td>
+<td align="left">covid-19</td>
+<td align="left">bjp</td>
+<td align="left">people</td>
+</tr>
+<tr class="even">
+<td align="left">people</td>
+<td align="left">indian</td>
+<td align="left">government</td>
+<td align="left">district</td>
+<td align="left">bench</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Top 5 words in each topic:</strong></p>
+<pre class="r"><code>news_lda5_betas &lt;- broom::tidy(news_lda5)
+
+top_terms_in_topics &lt;- news_lda5_betas %&gt;%
+  group_by(topic) %&gt;%
+  top_n(5, beta) %&gt;%
+  ungroup() %&gt;%
+  arrange(topic, -beta)
+
+top_terms_in_topics %&gt;%
+  mutate(term = reorder(term, beta)) %&gt;%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = &quot;free&quot;) +
+  coord_flip()</code></pre>
+<p><img src="javascript://" width="672"/></p>
+<p><strong>Best number of topics based on perplexity:</strong></p>
+<p>To know this we take the training set for article_length &gt; 1500 (~15697 documents) and remaining to test the documents.</p>
+<pre class="r"><code>test = subset(news_df, news_df$article_length &gt; 1500)
+nrow(test)</code></pre>
+<pre><code>## [1] 15697</code></pre>
+<p><strong>Testing and Training:</strong> (code: –&gt;)</p>
+<pre class="r"><code>train_news_dtmat &lt;- corpus_subset(news_corp, article_length &gt; 1500) %&gt;%
+  tokens(remove_punct = TRUE, remove_numbers = TRUE,
+         remove_symbols = TRUE, remove_url = TRUE) %&gt;%
+  dfm(tolower = TRUE) %&gt;%
+  dfm_remove(c(stopwords(&quot;en&quot;), myStopWords)) %&gt;%
+  dfm_trim(min_termfreq = 5, min_docfreq = 10) %&gt;%
+  quanteda::convert(to=&quot;topicmodels&quot;)
+
+test_news_dtmat &lt;- corpus_subset(news_corp, article_length &lt;= 1500) %&gt;%
+  tokens(remove_punct = TRUE, remove_numbers = TRUE,
+         remove_symbols = TRUE, remove_url = TRUE) %&gt;%
+  dfm(tolower = TRUE) %&gt;%
+  dfm_remove(c(stopwords(&quot;en&quot;), myStopWords)) %&gt;%
+  dfm_trim(min_termfreq = 5, min_docfreq = 10) %&gt;%
+  quanteda::convert(to=&quot;topicmodels&quot;)</code></pre>
+<p><strong>Based on the perplexity vs n_topics graph, we see that the ideal number for the model is 2 topics:</strong></p>
+<pre class="r"><code>n_topics_vec = 2:5
+perplexity_vec = map_dbl(n_topics_vec, function(kk) {
+  message(kk)
+  train_news_ldaK &lt;- LDA(train_news_dtmat, k = kk, control = list(seed = 123))
+  perp = perplexity(train_news_ldaK, test_news_dtmat)
+})
+
+lda_perplexity_result = tibble(
+  n_topics = n_topics_vec, perplexity = perplexity_vec
+)
+
+plot(lda_perplexity_result, type=&quot;l&quot;)</code></pre>
+<p><img src="javascript://" width="672"/></p>
+<p><strong>LDA tuning and fitting model with best number of topics:</strong> (code –&gt;)</p>
+<pre class="r"><code>lda_ldatuning_result &lt;- FindTopicsNumber(
+  news_dtmat, topics = n_topics_vec,
+  metrics = c(&quot;CaoJuan2009&quot;, &quot;Arun2010&quot;, &quot;Deveaud2014&quot;),
+  method = &quot;VEM&quot;, control = list(seed = 123), mc.cores = 4L, verbose = TRUE
+)</code></pre>
+<p><strong>CaoJuan2009, Arun2010 and Deveaud2014 metrics plot:</strong></p>
+<pre class="r"><code>FindTopicsNumber_plot(lda_ldatuning_result)</code></pre>
+<p><img src="javascript://" width="672"/></p>
+<p><strong>We see that the Deveaud2014 value is highest for 2 topics to give the best LDA model.</strong></p>
+<p><strong>Below is the model with 2 topics and its diagnostics:</strong></p>
+<pre class="r"><code>news_lda2 &lt;- LDA(news_dtmat, k = 2, control = list(seed = 123))
+topicdoc_result2 = topic_diagnostics(news_lda2, news_dtmat)
+kable(topicdoc_result2, caption = &quot;Diagnostics&quot;)</code></pre>
+<table>
+<caption>Diagnostics</caption>
+<colgroup>
+<col width="8%"/>
+<col width="9%"/>
+<col width="15%"/>
+<col width="14%"/>
+<col width="9%"/>
+<col width="12%"/>
+<col width="13%"/>
+<col width="15%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th align="right">topic_num</th>
+<th align="right">topic_size</th>
+<th align="right">mean_token_length</th>
+<th align="right">dist_from_corpus</th>
+<th align="right">tf_df_dist</th>
+<th align="right">doc_prominence</th>
+<th align="right">topic_coherence</th>
+<th align="right">topic_exclusivity</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="right">1</td>
+<td align="right">2485.843</td>
+<td align="right">5.8</td>
+<td align="right">0.2024250</td>
+<td align="right">3.174889</td>
+<td align="right">19999</td>
+<td align="right">-205.1819</td>
+<td align="right">7.762620</td>
+</tr>
+<tr class="even">
+<td align="right">2</td>
+<td align="right">2431.157</td>
+<td align="right">5.7</td>
+<td align="right">0.2017592</td>
+<td align="right">7.475025</td>
+<td align="right">19999</td>
+<td align="right">-221.8073</td>
+<td align="right">8.854065</td>
+</tr>
+</tbody>
+</table>
+<hr/>
+</div>
+<div class="section level2">
+<h2>6. STM</h2>
+<p><strong>STM model with 5 topics:</strong></p>
+<p>(We have set the prevalence according to the ‘article_length’ and have set the maximum number of iterations to 75 which takes ~19 minutes to run)</p>
+<pre class="r"><code>stm_newsdfmat &lt;- quanteda::convert(news_dfm, to = &quot;stm&quot;)
+out &lt;- prepDocuments(
+  stm_newsdfmat$documents, stm_newsdfmat$vocab, stm_newsdfmat$meta)
+
+news_tmob_stm &lt;- stm(
+  out$documents, out$vocab, K=5,
+  prevalence = ~s(article_length),
+  data=out$meta,
+  init.type= &quot;Spectral&quot;,
+  max.em.its=75,
+  seed=123)</code></pre>
+<p><strong>Summary plot of model:</strong></p>
+<pre class="r"><code>plot(news_tmob_stm, type=&quot;summary&quot;, n=5)</code></pre>
+<p><img src="javascript://" width="960"/></p>
+<p><strong>Quality of Topics:</strong></p>
+<pre class="r"><code>topicQuality(news_tmob_stm, out$documents)</code></pre>
+<p><img src="javascript://" width="960"/></p>
+<p><strong>Interpretation of the above results:</strong></p>
+<blockquote>
+<p>From the summary plot, we see that topic 2 has words like’india’, ‘government’, ‘modi’ and ‘kashmir’. The ruling party’s manifesto for 2019 had an important decision regarding the state of kashmir that year. Thus it is natural to see the occurences of related words. Other words from topics give an idea that most news revloved around the government, BJP (ruling party), chief ministers of states and also a good number of articles were about and around money (‘rs’ is the currency symbol of India, ‘lakh’ is 100,000) (from topic 5)</p>
+</blockquote>
+<blockquote>
+<p>From the topicQuality(), we can see that Topic 5 has the highest ‘Exclusivity’ but low ‘Semantic Coherence’ whereas Topic 4 has the highest ‘Semantic Coherence’ but relatively low ‘Exclusivity’.</p>
+</blockquote>
+<hr/>
+</div>
+<div class="section level2">
+<h2>7. Keyword Assisted Topic Model:</h2>
+<p><strong>Reading data from the Document Feature Matrix:</strong></p>
+<pre class="r"><code>keyATM_docs &lt;- keyATM_read(texts = news_dfm)
+summary(keyATM_docs)</code></pre>
+<pre><code>## keyATM_docs object of: 20000 documents.
+## Length of documents:
+##   Avg: 14.263
+##   Min: 0
+##   Max: 42
+##    SD: 4.792
+## Number of unique words: 44732</code></pre>
+<p><strong>Creating 3 sets of keywords:</strong></p>
+<pre class="r"><code>news_key_list = list(
+  law = c(&quot;police&quot;, &quot;crime&quot;, &quot;bribe&quot;, &quot;official&quot;, &quot;officials&quot;, 
+           &quot;meetings&quot;,&quot;justice&quot;,&quot;party&quot;,&quot;shah&quot;),
+  govt = c(&quot;citizenship&quot;, &quot;modi&quot;, &quot;minister&quot;, &quot;chief&quot;, &quot;congress&quot;, &quot;bjp&quot;, &quot;singh&quot;,
+           &quot;opposition&quot;, &quot;lottery&quot;,&quot;jammu&quot;,&quot;pakistan&quot;),
+  corona = c(&quot;covid-19&quot;,&quot;lockdown&quot;, &quot;virus&quot;, &quot;death&quot;, &quot;cases&quot;, &quot;relief&quot;, &quot;vaccine&quot;)
+)
+
+news_key_viz &lt;- visualize_keywords(docs = keyATM_docs, keywords = news_key_list)
+news_key_viz</code></pre>
+<p><img src="javascript://" width="672"/></p>
+<p><strong>keyATM Base model with keyword sets and 3 no-keyword topics:</strong></p>
+<pre class="r"><code>news_tmod_keyatm_base &lt;- keyATM(
+  docs = keyATM_docs, 
+  no_keyword_topics = 3, 
+  keywords = news_key_list, 
+  model = &quot;base&quot;, 
+  options = list(seed = 123))</code></pre>
+<p><strong>Top 5 keywords in each topic:</strong></p>
+<pre class="r"><code>kable(top_words(news_tmod_keyatm_base, 5), caption = &quot;Top 5 keywords&quot;)</code></pre>
+<table>
+<caption>Top 5 keywords</caption>
+<thead>
+<tr class="header">
+<th align="left">1_law</th>
+<th align="left">2_govt</th>
+<th align="left">3_corona</th>
+<th align="left">Other_1</th>
+<th align="left">Other_2</th>
+<th align="left">Other_3</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">police [&lt;U+2713&gt;]</td>
+<td align="left">minister [&lt;U+2713&gt;]</td>
+<td align="left">cases [&lt;U+2713&gt;]</td>
+<td align="left">court</td>
+<td align="left">rs</td>
+<td align="left">assembly</td>
+</tr>
+<tr class="even">
+<td align="left">case</td>
+<td align="left">government</td>
+<td align="left">state</td>
+<td align="left">justice [1]</td>
+<td align="left">crore</td>
+<td align="left">per</td>
+</tr>
+<tr class="odd">
+<td align="left">accused</td>
+<td align="left">state</td>
+<td align="left">covid-19 [&lt;U+2713&gt;]</td>
+<td align="left">bench</td>
+<td align="left">per</td>
+<td align="left">cent</td>
+</tr>
+<tr class="even">
+<td align="left">district</td>
+<td align="left">chief [&lt;U+2713&gt;]</td>
+<td align="left">government</td>
+<td align="left">case</td>
+<td align="left">government</td>
+<td align="left">singh [2]</td>
+</tr>
+<tr class="odd">
+<td align="left">court</td>
+<td align="left">congress [&lt;U+2713&gt;]</td>
+<td align="left">lockdown [&lt;U+2713&gt;]</td>
+<td align="left">supreme</td>
+<td align="left">cent</td>
+<td align="left">yojana</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+
+
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="/d2l/common/math/MathML.js?v=20.21.10.32902 "></script><script type="text/javascript">document.addEventListener('DOMContentLoaded', function() { D2LMathML.DesktopInit('https://s.brightspace.com/lib/mathjax/2.7.4/MathJax.js?config=MML_HTMLorMML','https://s.brightspace.com/lib/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML','130',false); });</script></body></html>

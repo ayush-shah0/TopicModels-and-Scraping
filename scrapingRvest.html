@@ -1,0 +1,257 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html><head></head><body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div>
+
+<div class="btn-group pull-right float-right">
+<span>Code</span> <span class="caret"></span>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a rel="noopener" href="#">Show All Code</a></li>
+<li><a rel="noopener" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Assignment 3: <em>Using ‘rvest’ to scrape data</em></h1>
+<h4 class="author">Ayush Shah</h4>
+<h4 class="date">9/15/2021</h4>
+
+</div>
+
+
+<hr/>
+<div class="section level2">
+<h2>Description:</h2>
+<p><strong>In this assignment, we explore the website <a rel="noopener" href="https://www.federalregister.gov/agencies/centers-for-disease-control-and-prevention" class="uri">https://www.federalregister.gov/agencies/centers-for-disease-control-and-prevention</a> using <em>rvest</em> in R and <em>SelectorGadget</em> for CSS selector generation.</strong></p>
+<pre class="r"><code>knitr::opts_chunk$set(message = FALSE, warning = FALSE)</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Libraries:</h2>
+<pre class="r"><code>library(httr)
+library(rvest)
+library(tidyverse)
+library(knitr)</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>1. Reading the URL:</h2>
+<pre class="r"><code>url &lt;- &quot;https://www.federalregister.gov/agencies/centers-for-disease-control-and-prevention&quot;
+
+fed_reg = read_html(url)</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>2. Agency URL:</h2>
+<pre class="r"><code>agency_link &lt;- fed_reg %&gt;%
+  html_element(css=&quot;dd:nth-child(2) a&quot;) %&gt;%
+  html_attr(&quot;href&quot;)
+
+agency_link</code></pre>
+<pre><code>## [1] &quot;http://www.cdc.gov/&quot;</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>3. Name of Parent Agency:</h2>
+<pre class="r"><code>parent_agency &lt;- fed_reg %&gt;%
+  html_element(css=&quot;dd~ dd a&quot;) %&gt;%
+  html_text()
+
+parent_agency</code></pre>
+<pre><code>## [1] &quot;Health and Human Services Department&quot;</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>4. Description of Agency:</h2>
+<pre class="r"><code>para &lt;- fed_reg %&gt;%
+  html_elements(css=&quot;.description p&quot;) %&gt;%
+  html_text()
+
+para[2]</code></pre>
+<pre><code>## [1] &quot;The Centers for Disease Control and Prevention (CDC), as part of the Public Health Service, is charged with protecting the public health of the Nation by providing leadership and direction in the prevention of and control of diseases and other preventable conditions and responding to public health emergencies. Within the CDC, there are four coordinating centers, two coordinating offices, and the National Institute for Occupational Safety and Health.&quot;</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>5. URL and image of Agency Logo:</h2>
+<pre class="r"><code>logo_url &lt;- fed_reg %&gt;%
+  html_element(css=&quot;.agency-logo&quot;) %&gt;% 
+  html_attr(&quot;data-src&quot;)
+logo_url</code></pre>
+<pre><code>## [1] &quot;https://agency-logos.federalregister.gov/44/thumb.png?1279143855&quot;</code></pre>
+<div class="figure">
+<img src="javascript://" alt="Agency Logo" width="50%"/>
+<p class="caption">
+Agency Logo
+</p>
+</div>
+<hr/>
+</div>
+<div class="section level2">
+<h2>6. Summary of top 5 significant documents:</h2>
+<pre class="r"><code>#title
+doc_TITLE &lt;- fed_reg %&gt;%
+  html_elements(css = &quot;#significant-documents h5 a&quot;) %&gt;%
+  html_text()
+
+df &lt;- as.data.frame(doc_TITLE)
+
+#url
+doc_url &lt;- fed_reg %&gt;%
+  html_elements(css = &quot;#significant-documents h5 a&quot;) %&gt;%
+  html_attr(&quot;href&quot;)
+
+df$doc_URL &lt;- doc_url
+
+#date
+doc_date &lt;- fed_reg %&gt;%
+  html_elements(css = &quot;#significant-documents .metadata a+ a&quot;) %&gt;%
+  html_text()
+
+df$doc_DATE &lt;- doc_date
+
+#action
+doc_ACTIONS &lt;- vector(&quot;character&quot;, nrow(df))
+for (i in 1:nrow(df)) {
+  doc_ACTIONS[i] &lt;- read_html(df$doc_URL[i]) %&gt;%
+                    html_element(css = &quot;#p-2&quot;) %&gt;%
+                    html_text()
+}
+
+df$doc_ACTION &lt;- doc_ACTIONS
+
+kable(df, caption = &quot;Top 5 significant documents&quot;)</code></pre>
+<table>
+<caption>Top 5 significant documents</caption>
+<colgroup>
+<col width="42%"/>
+<col width="44%"/>
+<col width="2%"/>
+<col width="10%"/>
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">doc_TITLE</th>
+<th align="left">doc_URL</th>
+<th align="left">doc_DATE</th>
+<th align="left">doc_ACTION</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Total Inward Leakage Requirements for Respirators</td>
+<td align="left"><a rel="noopener" href="https://www.federalregister.gov/documents/2010/05/27/2010-12744/total-inward-leakage-requirements-for-respirators" class="uri">https://www.federalregister.gov/documents/2010/05/27/2010-12744/total-inward-leakage-requirements-for-respirators</a></td>
+<td align="left">05/27/2010</td>
+<td align="left">Notice of public meeting.</td>
+</tr>
+<tr class="even">
+<td align="left">Medical Examination of Aliens-Removal of Human Immunodeficiency Virus (HIV) Infection From Definition of Communicable Disease of Public Health Significance</td>
+<td align="left"><a rel="noopener" href="https://www.federalregister.gov/documents/2009/11/02/E9-26337/medical-examination-of-aliens-removal-of-human-immunodeficiency-virus-hiv-infection-from-definition" class="uri">https://www.federalregister.gov/documents/2009/11/02/E9-26337/medical-examination-of-aliens-removal-of-human-immunodeficiency-virus-hiv-infection-from-definition</a></td>
+<td align="left">11/02/2009</td>
+<td align="left">Final rule.</td>
+</tr>
+<tr class="odd">
+<td align="left">Possession, Use, and Transfer of Select Agents and Toxins-Chapare virus</td>
+<td align="left"><a rel="noopener" href="https://www.federalregister.gov/documents/2009/08/19/E9-19737/possession-use-and-transfer-of-select-agents-and-toxins-chapare-virus" class="uri">https://www.federalregister.gov/documents/2009/08/19/E9-19737/possession-use-and-transfer-of-select-agents-and-toxins-chapare-virus</a></td>
+<td align="left">08/19/2009</td>
+<td align="left">Notice of proposed rulemaking.</td>
+</tr>
+<tr class="even">
+<td align="left">Medical Examination of Aliens-Removal of Human Immunodeficiency Virus (HIV) Infection From Definition of Communicable Disease of Public Health Significance</td>
+<td align="left"><a rel="noopener" href="https://www.federalregister.gov/documents/2009/07/02/E9-15814/medical-examination-of-aliens-removal-of-human-immunodeficiency-virus-hiv-infection-from-definition" class="uri">https://www.federalregister.gov/documents/2009/07/02/E9-15814/medical-examination-of-aliens-removal-of-human-immunodeficiency-virus-hiv-infection-from-definition</a></td>
+<td align="left">07/02/2009</td>
+<td align="left">Notice of Proposed Rulemaking (NPRM).</td>
+</tr>
+<tr class="odd">
+<td align="left">Possession, Use, and Transfer of Select Agents and Toxins</td>
+<td align="left"><a rel="noopener" href="https://www.federalregister.gov/documents/2008/10/30/E8-25883/possession-use-and-transfer-of-select-agents-and-toxins" class="uri">https://www.federalregister.gov/documents/2008/10/30/E8-25883/possession-use-and-transfer-of-select-agents-and-toxins</a></td>
+<td align="left">10/30/2008</td>
+<td align="left">Final rule; technical correction.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+
+
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="/d2l/common/math/MathML.js?v=20.21.10.32902 "></script><script type="text/javascript">document.addEventListener('DOMContentLoaded', function() { D2LMathML.DesktopInit('https://s.brightspace.com/lib/mathjax/2.7.4/MathJax.js?config=MML_HTMLorMML','https://s.brightspace.com/lib/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML','130',false); });</script></body></html>
