@@ -1,0 +1,457 @@
+---
+title: "SBIR Awards"
+author: "Team 9"
+date: "10/2/2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+---
+
+```{r}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## ![](https://www.sbir.gov/sites/all/themes/sbir/images/sbir-sttr-logo.svg)
+
+* The Small Business Innovation Research ([SBIR](https://www.sbir.gov/sbirsearch/award/all)) programs are highly competitive programs that encourage domestic small businesses to engage in Federal Research/Research and Development. 
+
+* The data set will give us insights into the different award categories, the companies receiving them, the location of the companies, year of award (helping understand the shift in trends of issues being focused on by the US government)
+
+## Problem Description:
+
+* Understanding the data set with respect to the field and sector of business will give us insights on what the US government believes to yield innovative solutions for the community. 
+
+* The analysis will also help us understand the geographical areas involved in creating the said solutions, thereby earning the awards.
+
+## Data and columns used:
+
+* The dataset has been fetched from the ([SBIR](https://www.sbir.gov/sbirsearch/award/all)) website. It contains a total of 188554 rows with columns like the Award Title, Agency giving the award, Award date, Abstract, State in which the company is, Number of Employees etc. We will be selecting the SBIR program only for analysis. Following are the columns used :
+
+           "Company",	
+           
+           "Award.Title",	
+        
+           "Agency",
+           
+           "Proposal.Award.Date",	
+           
+           "Contract.End.Date",	
+           
+           "Award.Year",	
+           
+           "Award.Amount",
+           
+           "Socially.and.Economically.Disadvantaged",
+           
+           "Women.Owned",
+           
+           "Number.Employees",
+           
+           "State",
+           
+           "Zip",
+           
+           "Abstract"))
+           
+
+---
+
+## Libraries used:
+
+```{r 0, cache = TRUE}
+library(topicmodels)
+library(quanteda)
+library(tidyverse)
+library(tidytext)
+library(topicdoc)
+library(LDAvis)
+library(plyr)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(keyATM)
+library(stm)
+library(ldatuning)
+library(ngram)
+library(quanteda.textmodels)
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(textrank)
+library(readtext)
+library(udpipe)
+library(stringr)
+library(scales)
+library(seededlda)
+library(knitr)
+```
+
+## Importing and Filtering Data:
+
+```{r 1, cache=TRUE}
+df1 = read.csv("award_data.csv")
+df2 = df1[df1$Program == "SBIR", ] %>%
+  select(c("Company",	
+           "Award.Title",	
+           "Agency",
+           "Proposal.Award.Date",	
+           "Contract.End.Date",	
+           "Award.Year",	
+           "Award.Amount",
+           "Socially.and.Economically.Disadvantaged",
+           "Women.Owned",
+           "Number.Employees",
+           "State",	
+           "Zip",
+           "Abstract"))
+df = na.omit(df2)
+
+df$Award.Amount <- gsub(",", "", df$Award.Amount)
+df$Award.Amount <- as.numeric(df$Award.Amount)
+
+row.has.na <- apply(df, 1, function(x){any(is.na(x))})
+df_final <- df[!row.has.na,]
+
+```
+
+---
+
+## General Data Insights:
+
+**Following is a graph showing the Agencies and their total amount awarded to companies over the years 1981 to 2021(till now):**
+
+
+```{r 2, fig.height=10, fig.width=10, cache = TRUE}
+
+award_amount <- ddply(df_final, c("Agency"), summarize, Award.Amount = sum(Award.Amount))
+award_amount = award_amount[-1,]
+
+p = ggplot(award_amount, aes(Agency, Award.Amount/1000000000, fill = Agency)) + geom_col(position = "dodge")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+          
+p + xlab("Agency")+ ylab("Award Amount in Billions")+ labs(fill = "Agency")
+
+```
+
+---
+
+## Corpus, Stopwords, Tokenization, DFM and TopFeatures:
+
+```{r 3,cache=TRUE}
+
+df_final$ID <- seq.int(nrow(df_final))
+colnames(df_final)[13] <- "text_field"
+colnames(df_final)[14] <- "docid_field"
+
+award_corp <- corpus(df_final, 
+                     text_field = "text_field", 
+                     docid_field = "docid_field")
+
+mystopwords = c("can", "use", "ii", "new", "using", 
+                "used", "also", "low", "s", "n", "sbir", "one", "?",
+                "two", "demonstrated", "allow","provided", "provides", "results",
+                "enable","specific","techniques","large","need","technology","technologies",
+                "based","project","developed","developing","provide","provides","approach",
+                "many","currently","methods","however","product","phase","develop","design",
+                "systems","proposed","development","research","applications","significant",
+                "system","due", "study","within", "propose", "available","data","high","low",
+                " ", "")
+
+award_toks <- tokens(award_corp, remove_punct = TRUE, remove_numbers = TRUE,
+                  remove_symbols = TRUE, remove_url = TRUE, split_hyphens = FALSE)
+
+award_toks <- tokens_remove(  award_toks, 
+                              pattern = c(stopwords("en"), mystopwords))
+
+award_dfm <- dfm(award_toks, tolower = TRUE) %>%
+  dfm_trim(min_termfreq = 40, min_docfreq = 100)
+
+topfeatures(award_dfm, 10)
+
+```
+
+---
+
+## Keyness plot for 'Award.Year' < 1990 vs 'Award.Year' >= 1990:
+
+```{r 4, fig.width=10, fig.height=5,cache=TRUE}
+
+award_tstat_key <- textstat_keyness(award_dfm, target = award_dfm$Award.Year < 1990 )
+textplot_keyness(award_tstat_key, n=10, min_count = 10)
+
+```
+
+---
+
+## Textplot analysis:
+
+```{r 5, fig.width=10, fig.height=5, cache = TRUE}
+
+award_dfm_small <- dfm_trim(award_dfm, min_termfreq = 1500)
+
+
+award_fcmat <- fcm(award_dfm_small)
+feat <- names(topfeatures(award_fcmat, 20))
+fcmat_select <- fcm_select(award_fcmat, pattern = feat, selection = "keep")
+
+size <- log(colSums(dfm_select(award_fcmat, feat, selection = "keep")))
+set.seed(123)
+textplot_network(fcmat_select, min_freq = 0.5, edge_size = 1.7, edge_color = "red",
+                 vertex_size = size/max(size)*3)
+
+```
+
+---
+
+## Creating dictionary for _SeededLDA_ and _keyATM Base_ models:
+
+**We make dictionaries for the following industries:**
+
+> Optics
+
+> Space
+
+> Biotechnology
+
+> Pharmacy
+
+> Automobile
+
+#### To make the dictionary, we use textstat_keyness to find words similar to tokens declared in variable 'optics', 'space', 'bio', 'pharma' and 'auto'. Out of the list returned, we select the top 20 based on the chi2 value.
+
+```{r 6,cache=TRUE}
+
+# imaging
+optics <- c("image", "imaging*", "laser", "photons")
+toks_inside <- tokens_keep(award_toks, pattern = optics, window = 10)
+toks_inside <- tokens_remove(toks_inside, pattern = optics) # remove the keywords
+toks_outside <- tokens_remove(award_toks, pattern = optics, window = 10)
+
+dfmat_inside <- dfm(toks_inside)
+dfmat_outside <- dfm(toks_outside)
+
+tstat_key_inside <- textstat_keyness(rbind(dfmat_inside, dfmat_outside), 
+                                     target = seq_len(ndoc(dfmat_inside)))
+
+optics_list <- tstat_key_inside$feature[1:20]
+
+## space
+
+space <- c("space", "aerospace*", "shuttle", "physics", "rocket", "fuel")
+toks_inside2 <- tokens_keep(award_toks, pattern = space, window = 10)
+toks_inside2 <- tokens_remove(toks_inside2, pattern = space) # remove the keywords
+toks_outside2 <- tokens_remove(award_toks, pattern = space, window = 10)
+
+dfmat_inside2 <- dfm(toks_inside2)
+dfmat_outside2 <- dfm(toks_outside2)
+
+tstat_key_inside2 <- textstat_keyness(rbind(dfmat_inside2, dfmat_outside2), 
+                                     target = seq_len(ndoc(dfmat_inside2)))
+
+space_list <- tstat_key_inside2$feature[1:20]
+
+
+## biotechnology
+
+bio <- c("biotechnology", "biotech*", "CRISPR", "bioengineering", "chromosome", "dna",
+         "gene", "gene_editing", "genome")
+toks_inside3 <- tokens_keep(award_toks, pattern = bio, window = 10)
+toks_inside3 <- tokens_remove(toks_inside3, pattern = bio) # remove the keywords
+toks_outside3 <- tokens_remove(award_toks, pattern = bio, window = 10)
+
+dfmat_inside3 <- dfm(toks_inside3)
+dfmat_outside3 <- dfm(toks_outside3)
+
+tstat_key_inside3 <- textstat_keyness(rbind(dfmat_inside3, dfmat_outside3), 
+                                     target = seq_len(ndoc(dfmat_inside3)))
+
+bio_list <- tstat_key_inside3$feature[1:20]
+
+## pharma 
+
+pharma <- c("pharmacy", "pharmaceutical*", "medicine", "cancer", "gram", "chemistry",
+         "r&d", "drug*", "research")
+toks_inside4 <- tokens_keep(award_toks, pattern = pharma, window = 10)
+toks_inside4 <- tokens_remove(toks_inside4, pattern = pharma) # remove the keywords
+toks_outside4 <- tokens_remove(award_toks, pattern = pharma, window = 10)
+
+dfmat_inside4 <- dfm(toks_inside4)
+dfmat_outside4 <- dfm(toks_outside4)
+
+tstat_key_inside4 <- textstat_keyness(rbind(dfmat_inside4, dfmat_outside4), 
+                                     target = seq_len(ndoc(dfmat_inside4)))
+pharma_list <- tstat_key_inside4$feature[1:20]
+
+## automobile
+
+auto <- c("car", "automobile", "fuel", "engineering", "aerodynamic", "machine",
+          "airbag*", "pollution", "brake", "gear", "horsepower","transmission")
+toks_inside5 <- tokens_keep(award_toks, pattern = auto, window = 10)
+toks_inside5 <- tokens_remove(toks_inside5, pattern = auto) # remove the keywords
+toks_outside5 <- tokens_remove(award_toks, pattern = auto, window = 10)
+
+dfmat_inside5 <- dfm(toks_inside5)
+dfmat_outside5 <- dfm(toks_outside5)
+
+tstat_key_inside5 <- textstat_keyness(rbind(dfmat_inside5, dfmat_outside5), 
+                                     target = seq_len(ndoc(dfmat_inside5)))
+
+auto_list <- tstat_key_inside5$feature[1:20]
+
+```
+
+---
+
+## Model 1- Seeded LDA: 
+
+**Here we use our created dictionary and get the following 5 topics to from the textmodel_seededlda function:**
+
+```{r 7,cache=TRUE}
+
+award_dict_list = list(optics = optics_list, space = space_list,bio = bio_list,
+                       pharma = pharma_list, automobile = auto_list)
+
+award_dict <- quanteda::dictionary(award_dict_list)
+
+
+award_slda_words <- textmodel_seededlda(award_dfm, dictionary = award_dict)
+
+terms(award_slda_words,20)
+```
+
+## Finding the probability of a document belonging to any of the 5 topics created in seededLDA: 
+
+```{r 8,cache=TRUE}
+
+get_doc_topic_probs <- function(slda) {
+  out <- slda$theta %>%
+    as_tibble(rownames ="doc_id")
+  return(out)
+}
+doc_topic <- get_doc_topic_probs(award_slda_words)
+
+a=sum(doc_topic$optics)
+b=sum(doc_topic$space)
+c=sum(doc_topic$bio)
+d=sum(doc_topic$pharma)
+e = sum(doc_topic$automobile)
+
+total = a+b+c+d+e
+
+Industries<- c("Optics","Space","Bio.Tech","Pharma","Automobile")
+Probability<- c(a/total,b/total,c/total,d/total,e/total)
+
+Doc_prob<- data.frame(Industries,Probability)
+kable(Doc_prob, caption = "Topic probabilties for documents")
+```
+
+## Findings:
+
+**From this model, we can presume that given any award abstract, the probability of it belonging to the _Automobile_ sector is the highest followed by _Space_, _Biotechnology_, _Optics_' and _Pharmacy_**
+
+---
+
+## Model 2 - STM:
+
+**Step 1: Finding optimal number of groups:**
+
+We used ldatuning() and the parameters - "CaoJuan2009", "Arun2010", "Deveaud2014" to get the desired value of K (number of groups). The model fetched K = 3.
+
+**Step 2: Running the STM model for k = 3**
+
+```{r 9, message=FALSE, error=FALSE, results='hide', cache=TRUE}
+stm_award_dfm <- quanteda::convert(award_dfm, to = "stm")
+out <- prepDocuments(
+stm_award_dfm$documents, stm_award_dfm$vocab, stm_award_dfm$meta)
+
+award_tmob_stm <- stm(
+out$documents, out$vocab, K=3,
+prevalence = ~s(Award.Year),
+data=out$meta,
+init.type= "Spectral",
+max.em.its=50,
+seed=123)
+
+```
+
+## Plotting topics from STM:
+
+**1. Summary of data:**
+
+```{r 10, fig.width=8,cache=TRUE, fig.height=8, fig.width=10}
+plot(award_tmob_stm, type="summary", n=5)
+```
+
+**2. Top 10 keywords in each topic:**
+
+```{r 11,cache=TRUE}
+
+award_tmob_stm_beta <- tidytext::tidy(award_tmob_stm) 
+award_tmob_stm_beta %>% group_by(topic) %>% 
+  top_n(10, beta) %>% ungroup() %>%  
+  mutate(topic = paste0("Topic ", topic),         
+         term = reorder_within(term, beta, topic)) %>%  
+  ggplot(aes(term, beta, fill = as.factor(topic))) +  
+  geom_col(alpha = 0.8, show.legend = FALSE) +  
+  facet_wrap(~topic, scales="free_y") + coord_flip() + scale_x_reordered()
+
+```
+
+**3. Topic Quality - Exclusivity and Semantic Coherence:**
+
+```{r 12, fig.width=7, cache=TRUE, fig.height=8, fig.width = 10}
+
+topicQuality(award_tmob_stm, out$documents)
+
+```
+
+## Findings:
+
+* From the data, dividing the documents in 3 groups is the most optimal to form groups of tokens.
+
+* Topic 1 has high exclusivity, Topic 2 has high semantic coherence and topic 3 has _both_ high semantic coherence and exclusivity.
+
+---
+
+## Model 3 - keyATM Base Model:
+
+**Here we use the dictionary created abovd and keep 2 no-keyword topics.**
+
+```{r 13,cache=TRUE }
+award2_dfm = dfm_subset(award_dfm,ntoken(award_dfm)>0)
+keyATM_docs <- keyATM_read(texts = award2_dfm, progress_bar = TRUE)
+summary(keyATM_docs)
+        
+award_tmod_keyatm_base <- keyATM(  docs = keyATM_docs,  
+                                   no_keyword_topics = 2,  
+                                   keywords          = award_dict_list,
+                                   model             = "base",
+                                   options           = list(seed = 123, iterations = 75))
+```
+
+#### Top 5 words in our 5 topics and system-generated 2 topics:
+top_words(award_tmod_keyatm_base, 5)
+
+```
+
+### Insights:
+
+* The keyATM Base model was successfully run with our custom dictionary and 2 no-keyword topics.
+
+---
+---
+
+## Final takeaways:
+
+> It is clear that the Department of Defense invests the most amount into small businesses.
+
+> There has been a visible shift in the fields, industries and technologies that have been receiving grants over the years from 1960s to the 2020s (from keyness)
+
+> California has almost always been the top state with respect to most number of awards won in a year
+
+> Our dictionary suggests that out of the major industries and sectors present, any award has more probability to belong to a company in the _automobile_ industry
+
+---
+
+---
