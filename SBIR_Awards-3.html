@@ -1,0 +1,592 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html><head></head><body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div>
+
+<div class="btn-group pull-right float-right">
+<span>Code</span> <span class="caret"></span>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a rel="noopener" href="#">Show All Code</a></li>
+<li><a rel="noopener" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">SBIR Awards</h1>
+<h4 class="author">Team 9</h4>
+<h4 class="date">10/2/2021</h4>
+
+</div>
+
+
+<hr/>
+<pre class="r"><code>knitr::opts_chunk$set(message = FALSE, warning = FALSE)</code></pre>
+<div class="section level2">
+<h2><img src="javascript://"/></h2>
+<ul>
+<li><p>The Small Business Innovation Research (<a rel="noopener" href="https://www.sbir.gov/sbirsearch/award/all">SBIR</a>) programs are highly competitive programs that encourage domestic small businesses to engage in Federal Research/Research and Development.</p></li>
+<li><p>The data set will give us insights into the different award categories, the companies receiving them, the location of the companies, year of award (helping understand the shift in trends of issues being focused on by the US government)</p></li>
+</ul>
+</div>
+<div class="section level2">
+<h2>Problem Description:</h2>
+<ul>
+<li><p>Understanding the data set with respect to the field and sector of business will give us insights on what the US government believes to yield innovative solutions for the community.</p></li>
+<li><p>The analysis will also help us understand the geographical areas involved in creating the said solutions, thereby earning the awards.</p></li>
+</ul>
+</div>
+<div class="section level2">
+<h2>Data and columns used:</h2>
+<ul>
+<li><p>The dataset has been fetched from the (<a rel="noopener" href="https://www.sbir.gov/sbirsearch/award/all">SBIR</a>) website. It contains a total of 188554 rows with columns like the Award Title, Agency giving the award, Award date, Abstract, State in which the company is, Number of Employees etc. We will be selecting the SBIR program only for analysis. Following are the columns used :</p>
+<pre><code>     &quot;Company&quot;,   
+
+     &quot;Award.Title&quot;,   
+
+     &quot;Agency&quot;,
+
+     &quot;Proposal.Award.Date&quot;,   
+
+     &quot;Contract.End.Date&quot;, 
+
+     &quot;Award.Year&quot;,    
+
+     &quot;Award.Amount&quot;,
+
+     &quot;Socially.and.Economically.Disadvantaged&quot;,
+
+     &quot;Women.Owned&quot;,
+
+     &quot;Number.Employees&quot;,
+
+     &quot;State&quot;,
+
+     &quot;Zip&quot;,
+
+     &quot;Abstract&quot;))</code></pre></li>
+</ul>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Libraries used:</h2>
+<pre class="r"><code>library(topicmodels)
+library(quanteda)
+library(tidyverse)
+library(tidytext)
+library(topicdoc)
+library(LDAvis)
+library(plyr)
+library(dplyr)
+library(purrr)
+library(ggplot2)
+library(keyATM)
+library(stm)
+library(ldatuning)
+library(ngram)
+library(quanteda.textmodels)
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(textrank)
+library(readtext)
+library(udpipe)
+library(stringr)
+library(scales)
+library(seededlda)
+library(knitr)</code></pre>
+</div>
+<div class="section level2">
+<h2>Importing and Filtering Data:</h2>
+<pre class="r"><code>df1 = read.csv(&quot;award_data.csv&quot;)
+df2 = df1[df1$Program == &quot;SBIR&quot;, ] %&gt;%
+  select(c(&quot;Company&quot;,   
+           &quot;Award.Title&quot;,   
+           &quot;Agency&quot;,
+           &quot;Proposal.Award.Date&quot;,   
+           &quot;Contract.End.Date&quot;, 
+           &quot;Award.Year&quot;,    
+           &quot;Award.Amount&quot;,
+           &quot;Socially.and.Economically.Disadvantaged&quot;,
+           &quot;Women.Owned&quot;,
+           &quot;Number.Employees&quot;,
+           &quot;State&quot;, 
+           &quot;Zip&quot;,
+           &quot;Abstract&quot;))
+df = na.omit(df2)
+
+df$Award.Amount &lt;- gsub(&quot;,&quot;, &quot;&quot;, df$Award.Amount)
+df$Award.Amount &lt;- as.numeric(df$Award.Amount)
+
+row.has.na &lt;- apply(df, 1, function(x){any(is.na(x))})
+df_final &lt;- df[!row.has.na,]</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>General Data Insights:</h2>
+<p><strong>Following is a graph showing the Agencies and their total amount awarded to companies over the years 1981 to 2021(till now):</strong></p>
+<pre class="r"><code>award_amount &lt;- ddply(df_final, c(&quot;Agency&quot;), summarize, Award.Amount = sum(Award.Amount))
+award_amount = award_amount[-1,]
+
+p = ggplot(award_amount, aes(Agency, Award.Amount/1000000000, fill = Agency)) + geom_col(position = &quot;dodge&quot;)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+          
+p + xlab(&quot;Agency&quot;)+ ylab(&quot;Award Amount in Billions&quot;)+ labs(fill = &quot;Agency&quot;)</code></pre>
+<p><img src="javascript://" width="960"/></p>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Corpus, Stopwords, Tokenization, DFM and TopFeatures:</h2>
+<pre class="r"><code>df_final$ID &lt;- seq.int(nrow(df_final))
+colnames(df_final)[13] &lt;- &quot;text_field&quot;
+colnames(df_final)[14] &lt;- &quot;docid_field&quot;
+
+award_corp &lt;- corpus(df_final, 
+                     text_field = &quot;text_field&quot;, 
+                     docid_field = &quot;docid_field&quot;)
+
+mystopwords = c(&quot;can&quot;, &quot;use&quot;, &quot;ii&quot;, &quot;new&quot;, &quot;using&quot;, 
+                &quot;used&quot;, &quot;also&quot;, &quot;low&quot;, &quot;s&quot;, &quot;n&quot;, &quot;sbir&quot;, &quot;one&quot;, &quot;?&quot;,
+                &quot;two&quot;, &quot;demonstrated&quot;, &quot;allow&quot;,&quot;provided&quot;, &quot;provides&quot;, &quot;results&quot;,
+                &quot;enable&quot;,&quot;specific&quot;,&quot;techniques&quot;,&quot;large&quot;,&quot;need&quot;,&quot;technology&quot;,&quot;technologies&quot;,
+                &quot;based&quot;,&quot;project&quot;,&quot;developed&quot;,&quot;developing&quot;,&quot;provide&quot;,&quot;provides&quot;,&quot;approach&quot;,
+                &quot;many&quot;,&quot;currently&quot;,&quot;methods&quot;,&quot;however&quot;,&quot;product&quot;,&quot;phase&quot;,&quot;develop&quot;,&quot;design&quot;,
+                &quot;systems&quot;,&quot;proposed&quot;,&quot;development&quot;,&quot;research&quot;,&quot;applications&quot;,&quot;significant&quot;,
+                &quot;system&quot;,&quot;due&quot;, &quot;study&quot;,&quot;within&quot;, &quot;propose&quot;, &quot;available&quot;,&quot;data&quot;,&quot;high&quot;,&quot;low&quot;,
+                &quot; &quot;, &quot;&quot;)
+
+award_toks &lt;- tokens(award_corp, remove_punct = TRUE, remove_numbers = TRUE,
+                  remove_symbols = TRUE, remove_url = TRUE, split_hyphens = FALSE)
+
+award_toks &lt;- tokens_remove(  award_toks, 
+                              pattern = c(stopwords(&quot;en&quot;), mystopwords))
+
+award_dfm &lt;- dfm(award_toks, tolower = TRUE) %&gt;%
+  dfm_trim(min_termfreq = 40, min_docfreq = 100)
+
+topfeatures(award_dfm, 10)</code></pre>
+<pre><code>## performance       power  commercial        cost     process   materials 
+##       53391       50170       45782       43568       39068       37035 
+##     program     control     current        test 
+##       36659       34995       34432       33410</code></pre>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Keyness plot for ‘Award.Year’ &lt; 1990 vs ‘Award.Year’ &gt;= 1990:</h2>
+<pre class="r"><code>award_tstat_key &lt;- textstat_keyness(award_dfm, target = award_dfm$Award.Year &lt; 1990 )
+textplot_keyness(award_tstat_key, n=10, min_count = 10)</code></pre>
+<p><img src="javascript://" width="960"/></p>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Textplot analysis:</h2>
+<pre class="r"><code>award_dfm_small &lt;- dfm_trim(award_dfm, min_termfreq = 1500)
+
+
+award_fcmat &lt;- fcm(award_dfm_small)
+feat &lt;- names(topfeatures(award_fcmat, 20))
+fcmat_select &lt;- fcm_select(award_fcmat, pattern = feat, selection = &quot;keep&quot;)
+
+size &lt;- log(colSums(dfm_select(award_fcmat, feat, selection = &quot;keep&quot;)))
+set.seed(123)
+textplot_network(fcmat_select, min_freq = 0.5, edge_size = 1.7, edge_color = &quot;red&quot;,
+                 vertex_size = size/max(size)*3)</code></pre>
+<p><img src="javascript://" width="960"/></p>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Creating dictionary for <em>SeededLDA</em> and <em>keyATM Base</em> models:</h2>
+<p><strong>We make dictionaries for the following industries:</strong></p>
+<blockquote>
+<p>Optics</p>
+</blockquote>
+<blockquote>
+<p>Space</p>
+</blockquote>
+<blockquote>
+<p>Biotechnology</p>
+</blockquote>
+<blockquote>
+<p>Pharmacy</p>
+</blockquote>
+<blockquote>
+<p>Automobile</p>
+</blockquote>
+<div class="section level4">
+<h4>To make the dictionary, we use textstat_keyness to find words similar to tokens declared in variable ‘optics’, ‘space’, ‘bio’, ‘pharma’ and ‘auto’. Out of the list returned, we select the top 20 based on the chi2 value.</h4>
+<pre class="r"><code># imaging
+optics &lt;- c(&quot;image&quot;, &quot;imaging*&quot;, &quot;laser&quot;, &quot;photons&quot;)
+toks_inside &lt;- tokens_keep(award_toks, pattern = optics, window = 10)
+toks_inside &lt;- tokens_remove(toks_inside, pattern = optics) # remove the keywords
+toks_outside &lt;- tokens_remove(award_toks, pattern = optics, window = 10)
+
+dfmat_inside &lt;- dfm(toks_inside)
+dfmat_outside &lt;- dfm(toks_outside)
+
+tstat_key_inside &lt;- textstat_keyness(rbind(dfmat_inside, dfmat_outside), 
+                                     target = seq_len(ndoc(dfmat_inside)))
+
+optics_list &lt;- tstat_key_inside$feature[1:20]
+
+## space
+
+space &lt;- c(&quot;space&quot;, &quot;aerospace*&quot;, &quot;shuttle&quot;, &quot;physics&quot;, &quot;rocket&quot;, &quot;fuel&quot;)
+toks_inside2 &lt;- tokens_keep(award_toks, pattern = space, window = 10)
+toks_inside2 &lt;- tokens_remove(toks_inside2, pattern = space) # remove the keywords
+toks_outside2 &lt;- tokens_remove(award_toks, pattern = space, window = 10)
+
+dfmat_inside2 &lt;- dfm(toks_inside2)
+dfmat_outside2 &lt;- dfm(toks_outside2)
+
+tstat_key_inside2 &lt;- textstat_keyness(rbind(dfmat_inside2, dfmat_outside2), 
+                                     target = seq_len(ndoc(dfmat_inside2)))
+
+space_list &lt;- tstat_key_inside2$feature[1:20]
+
+
+## biotechnology
+
+bio &lt;- c(&quot;biotechnology&quot;, &quot;biotech*&quot;, &quot;CRISPR&quot;, &quot;bioengineering&quot;, &quot;chromosome&quot;, &quot;dna&quot;,
+         &quot;gene&quot;, &quot;gene_editing&quot;, &quot;genome&quot;)
+toks_inside3 &lt;- tokens_keep(award_toks, pattern = bio, window = 10)
+toks_inside3 &lt;- tokens_remove(toks_inside3, pattern = bio) # remove the keywords
+toks_outside3 &lt;- tokens_remove(award_toks, pattern = bio, window = 10)
+
+dfmat_inside3 &lt;- dfm(toks_inside3)
+dfmat_outside3 &lt;- dfm(toks_outside3)
+
+tstat_key_inside3 &lt;- textstat_keyness(rbind(dfmat_inside3, dfmat_outside3), 
+                                     target = seq_len(ndoc(dfmat_inside3)))
+
+bio_list &lt;- tstat_key_inside3$feature[1:20]
+
+## pharma 
+
+pharma &lt;- c(&quot;pharmacy&quot;, &quot;pharmaceutical*&quot;, &quot;medicine&quot;, &quot;cancer&quot;, &quot;gram&quot;, &quot;chemistry&quot;,
+         &quot;r&amp;d&quot;, &quot;drug*&quot;, &quot;research&quot;)
+toks_inside4 &lt;- tokens_keep(award_toks, pattern = pharma, window = 10)
+toks_inside4 &lt;- tokens_remove(toks_inside4, pattern = pharma) # remove the keywords
+toks_outside4 &lt;- tokens_remove(award_toks, pattern = pharma, window = 10)
+
+dfmat_inside4 &lt;- dfm(toks_inside4)
+dfmat_outside4 &lt;- dfm(toks_outside4)
+
+tstat_key_inside4 &lt;- textstat_keyness(rbind(dfmat_inside4, dfmat_outside4), 
+                                     target = seq_len(ndoc(dfmat_inside4)))
+pharma_list &lt;- tstat_key_inside4$feature[1:20]
+
+## automobile
+
+auto &lt;- c(&quot;car&quot;, &quot;automobile&quot;, &quot;fuel&quot;, &quot;engineering&quot;, &quot;aerodynamic&quot;, &quot;machine&quot;,
+          &quot;airbag*&quot;, &quot;pollution&quot;, &quot;brake&quot;, &quot;gear&quot;, &quot;horsepower&quot;,&quot;transmission&quot;)
+toks_inside5 &lt;- tokens_keep(award_toks, pattern = auto, window = 10)
+toks_inside5 &lt;- tokens_remove(toks_inside5, pattern = auto) # remove the keywords
+toks_outside5 &lt;- tokens_remove(award_toks, pattern = auto, window = 10)
+
+dfmat_inside5 &lt;- dfm(toks_inside5)
+dfmat_outside5 &lt;- dfm(toks_outside5)
+
+tstat_key_inside5 &lt;- textstat_keyness(rbind(dfmat_inside5, dfmat_outside5), 
+                                     target = seq_len(ndoc(dfmat_inside5)))
+
+auto_list &lt;- tstat_key_inside5$feature[1:20]</code></pre>
+<hr/>
+</div>
+</div>
+<div class="section level2">
+<h2>Model 1- Seeded LDA:</h2>
+<p><strong>Here we use our created dictionary and get the following 5 topics to from the textmodel_seededlda function:</strong></p>
+<pre class="r"><code>award_dict_list = list(optics = optics_list, space = space_list,bio = bio_list,
+                       pharma = pharma_list, automobile = auto_list)
+
+award_dict &lt;- quanteda::dictionary(award_dict_list)
+
+
+award_slda_words &lt;- textmodel_seededlda(award_dfm, dictionary = award_dict)
+
+terms(award_slda_words,20)</code></pre>
+<pre><code>##       optics          space         bio             pharma           
+##  [1,] &quot;optical&quot;       &quot;energy&quot;      &quot;protein&quot;       &quot;treatment&quot;      
+##  [2,] &quot;fiber&quot;         &quot;power&quot;       &quot;expression&quot;    &quot;clinical&quot;       
+##  [3,] &quot;resolution&quot;    &quot;cell&quot;        &quot;genetic&quot;       &quot;patients&quot;       
+##  [4,] &quot;beam&quot;          &quot;vehicles&quot;    &quot;genes&quot;         &quot;disease&quot;        
+##  [5,] &quot;infrared&quot;      &quot;solid&quot;       &quot;sequence&quot;      &quot;delivery&quot;       
+##  [6,] &quot;optics&quot;        &quot;nasa&quot;        &quot;rna&quot;           &quot;compounds&quot;      
+##  [7,] &quot;spectral&quot;      &quot;nuclear&quot;     &quot;sequencing&quot;    &quot;screening&quot;      
+##  [8,] &quot;x-ray&quot;         &quot;missions&quot;    &quot;amplification&quot; &quot;therapy&quot;        
+##  [9,] &quot;images&quot;        &quot;engine&quot;      &quot;sequences&quot;     &quot;therapeutic&quot;    
+## [10,] &quot;pulse&quot;         &quot;propulsion&quot;  &quot;pcr&quot;           &quot;diseases&quot;       
+## [11,] &quot;lasers&quot;        &quot;hydrogen&quot;    &quot;vectors&quot;       &quot;discovery&quot;      
+## [12,] &quot;wavelength&quot;    &quot;combustion&quot;  &quot;hybridization&quot; &quot;tumor&quot;          
+## [13,] &quot;camera&quot;        &quot;engines&quot;     &quot;mutations&quot;     &quot;breast&quot;         
+## [14,] &quot;nm&quot;            &quot;fuels&quot;       &quot;genomic&quot;       &quot;therapies&quot;      
+## [15,] &quot;diode&quot;         &quot;exploration&quot; &quot;microarray&quot;    &quot;lung&quot;           
+## [16,] &quot;tunable&quot;       &quot;automotive&quot;  &quot;polymerase&quot;    &quot;abuse&quot;          
+## [17,] &quot;ultrasound&quot;    &quot;diesel&quot;      &quot;cloning&quot;       &quot;prostate&quot;       
+## [18,] &quot;hyperspectral&quot; &quot;fossil&quot;      &quot;plasmid&quot;       &quot;chemotherapy&quot;   
+## [19,] &quot;tomography&quot;    &quot;pem&quot;         &quot;software&quot;      &quot;investigational&quot;
+## [20,] &quot;pet&quot;           &quot;jp-8&quot;        &quot;information&quot;   &quot;colorectal&quot;     
+##       automobile  
+##  [1,] &quot;power&quot;     
+##  [2,] &quot;learning&quot;  
+##  [3,] &quot;cell&quot;      
+##  [4,] &quot;engine&quot;    
+##  [5,] &quot;emissions&quot; 
+##  [6,] &quot;landing&quot;   
+##  [7,] &quot;engines&quot;   
+##  [8,] &quot;combustion&quot;
+##  [9,] &quot;reverse&quot;   
+## [10,] &quot;tank&quot;      
+## [11,] &quot;injector&quot;  
+## [12,] &quot;hydrogen&quot;  
+## [13,] &quot;methanol&quot;  
+## [14,] &quot;sofc&quot;      
+## [15,] &quot;fuels&quot;     
+## [16,] &quot;diesel&quot;    
+## [17,] &quot;reformer&quot;  
+## [18,] &quot;jp-8&quot;      
+## [19,] &quot;fossil&quot;    
+## [20,] &quot;pem&quot;</code></pre>
+</div>
+<div class="section level2">
+<h2>Finding the probability of a document belonging to any of the 5 topics created in seededLDA:</h2>
+<pre class="r"><code>get_doc_topic_probs &lt;- function(slda) {
+  out &lt;- slda$theta %&gt;%
+    as_tibble(rownames =&quot;doc_id&quot;)
+  return(out)
+}
+doc_topic &lt;- get_doc_topic_probs(award_slda_words)
+
+a=sum(doc_topic$optics)
+b=sum(doc_topic$space)
+c=sum(doc_topic$bio)
+d=sum(doc_topic$pharma)
+e = sum(doc_topic$automobile)
+
+total = a+b+c+d+e
+
+Industries&lt;- c(&quot;Optics&quot;,&quot;Space&quot;,&quot;Bio.Tech&quot;,&quot;Pharma&quot;,&quot;Automobile&quot;)
+Probability&lt;- c(a/total,b/total,c/total,d/total,e/total)
+
+Doc_prob&lt;- data.frame(Industries,Probability)
+kable(Doc_prob, caption = &quot;Topic probabilties for documents&quot;)</code></pre>
+<table>
+<caption>Topic probabilties for documents</caption>
+<thead>
+<tr class="header">
+<th align="left">Industries</th>
+<th align="right">Probability</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Optics</td>
+<td align="right">0.1827694</td>
+</tr>
+<tr class="even">
+<td align="left">Space</td>
+<td align="right">0.2304909</td>
+</tr>
+<tr class="odd">
+<td align="left">Bio.Tech</td>
+<td align="right">0.1975308</td>
+</tr>
+<tr class="even">
+<td align="left">Pharma</td>
+<td align="right">0.1575479</td>
+</tr>
+<tr class="odd">
+<td align="left">Automobile</td>
+<td align="right">0.2316610</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section level2">
+<h2>Findings:</h2>
+<p><strong>From this model, we can presume that given any award abstract, the probability of it belonging to the <em>Automobile</em> sector is the highest followed by <em>Space</em>, <em>Biotechnology</em>, <em>Optics</em>’ and <em>Pharmacy</em></strong></p>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Model 2 - STM:</h2>
+<p><strong>Step 1: Finding optimal number of groups:</strong></p>
+<p>We used ldatuning() and the parameters - “CaoJuan2009”, “Arun2010”, “Deveaud2014” to get the desired value of K (number of groups). The model fetched K = 3.</p>
+<p><strong>Step 2: Running the STM model for k = 3</strong></p>
+<pre class="r"><code>stm_award_dfm &lt;- quanteda::convert(award_dfm, to = &quot;stm&quot;)
+out &lt;- prepDocuments(
+stm_award_dfm$documents, stm_award_dfm$vocab, stm_award_dfm$meta)
+
+award_tmob_stm &lt;- stm(
+out$documents, out$vocab, K=3,
+prevalence = ~s(Award.Year),
+data=out$meta,
+init.type= &quot;Spectral&quot;,
+max.em.its=50,
+seed=123)</code></pre>
+</div>
+<div class="section level2">
+<h2>Plotting topics from STM:</h2>
+<p><strong>1. Summary of data:</strong></p>
+<pre class="r"><code>plot(award_tmob_stm, type=&quot;summary&quot;, n=5)</code></pre>
+<p><img src="javascript://" width="960"/></p>
+<p><strong>2. Top 10 keywords in each topic:</strong></p>
+<pre class="r"><code>award_tmob_stm_beta &lt;- tidytext::tidy(award_tmob_stm) 
+award_tmob_stm_beta %&gt;% group_by(topic) %&gt;% 
+  top_n(10, beta) %&gt;% ungroup() %&gt;%  
+  mutate(topic = paste0(&quot;Topic &quot;, topic),         
+         term = reorder_within(term, beta, topic)) %&gt;%  
+  ggplot(aes(term, beta, fill = as.factor(topic))) +  
+  geom_col(alpha = 0.8, show.legend = FALSE) +  
+  facet_wrap(~topic, scales=&quot;free_y&quot;) + coord_flip() + scale_x_reordered()</code></pre>
+<p><img src="javascript://" width="672"/></p>
+<p><strong>3. Topic Quality - Exclusivity and Semantic Coherence:</strong></p>
+<pre class="r"><code>topicQuality(award_tmob_stm, out$documents)</code></pre>
+<pre><code>## [1] -83.02572 -58.96611 -81.20186
+## [1] 8.488311 9.294926 8.850022</code></pre>
+<p><img src="javascript://" width="960"/></p>
+</div>
+<div class="section level2">
+<h2>Findings:</h2>
+<p><strong>From the data, dividing the documents in 3 groups is the most optimal to form groups of tokens.</strong></p>
+<p><strong>Topic 1 has high exclusivity, Topic 2 has high semantic coherence and topic 3 has <em>both</em> high semantic coherence and exclusivity.</strong></p>
+<hr/>
+</div>
+<div class="section level2">
+<h2>Model 3 - keyATM Base Model:</h2>
+<p><strong>Here we use the dictionary created abovd and keep 2 no-keyword topics.</strong></p>
+<pre class="r"><code>award2_dfm = dfm_subset(award_dfm,ntoken(award_dfm)&gt;0)
+keyATM_docs &lt;- keyATM_read(texts = award2_dfm, progress_bar = TRUE)
+summary(keyATM_docs)</code></pre>
+<pre><code>## keyATM_docs object of: 134584 documents.
+## Length of documents:
+##   Avg: 101.915
+##   Min: 1
+##   Max: 1248
+##    SD: 51.758
+## Number of unique words: 274096</code></pre>
+<pre class="r"><code>award_tmod_keyatm_base &lt;- keyATM(  docs = keyATM_docs,  
+                                   no_keyword_topics = 2,  
+                                   keywords          = award_dict_list,
+                                   model             = &quot;base&quot;,
+                                   options           = list(seed = 123, iterations = 75))
+                                   
+top_words(award_tmod_keyatm_base, 5)</code></pre>
+<pre><code>##      1_optics     2_space       3_bio      4_pharma 5_automobile     Other_1
+## 1 optical [✓]   power [✓]   detection  clinical [✓]      process      sensor
+## 2       laser   materials protein [✓]        health        water    software
+## 3   power [2]  energy [✓]         dna  patients [✓]          gas     control
+## 4     imaging performance    cell [2] treatment [✓]         fuel performance
+## 5 performance     thermal       cells   description         cost information
+##       Other_2
+## 1    software
+## 2 information
+## 3    training
+## 4    analysis
+## 5       tools</code></pre>
+</div>
+<div class="section level2">
+<h2>Derivation:</h2>
+<ul>
+<li>The keyATM Base model was successfully run with our custom dictionary and 2 no-keyword topics.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2>Final takeaways:</h2>
+<blockquote>
+<p>It is clear that the Department of Defense invests the most amount into small businesses.</p>
+</blockquote>
+<blockquote>
+<p>There has been a visible shift in the fields, industries and technologies that have been receiving grants over the years from 1960s to the 2020s (from keyness)</p>
+</blockquote>
+<blockquote>
+<p>California has almost always been the top state with respect to most number of awards won in a year</p>
+</blockquote>
+<blockquote>
+<p>Our dictionary suggests that out of the major industries and sectors present, any award has more probability to belong to a company in the <em>automobile</em> industry</p>
+</blockquote>
+<hr/>
+<hr/>
+</div>
+
+
+
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="/d2l/common/math/MathML.js?v=20.21.10.32902 "></script><script type="text/javascript">document.addEventListener('DOMContentLoaded', function() { D2LMathML.DesktopInit('https://s.brightspace.com/lib/mathjax/2.7.4/MathJax.js?config=MML_HTMLorMML','https://s.brightspace.com/lib/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML','130',false); });</script></body></html>
