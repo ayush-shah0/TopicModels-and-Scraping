@@ -1,10 +1,11 @@
 ---
-title: "SBIR Awards"
-author: "Team 9"
+title: "Submission - SBIR Awards (GSU Analytics)"
+author: "Ayush"
 date: "10/2/2021"
-output: 
+output:
   html_document:
     code_folding: hide
+  pdf_document: default
 ---
 
 ---
@@ -16,6 +17,8 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ## ![](https://www.sbir.gov/sites/all/themes/sbir/images/sbir-sttr-logo.svg)
 
 * The Small Business Innovation Research ([SBIR](https://www.sbir.gov/sbirsearch/award/all)) programs are highly competitive programs that encourage domestic small businesses to engage in Federal Research/Research and Development. 
+
+* We will conduct a text-mining analysis to guage the highest award-winning sectors, most award-winning states within the US and derive the most frequently used tech-related words within the winners' award description
 
 * The data set will give us insights into the different award categories, the companies receiving them, the location of the companies, year of award (helping understand the shift in trends of issues being focused on by the US government)
 
@@ -85,30 +88,32 @@ library(stringr)
 library(scales)
 library(seededlda)
 library(knitr)
+#tinytex::install_tinytex()
 ```
 
 ## Importing and Filtering Data:
 
 ```{r 1, cache=TRUE}
-df1 = read.csv("award_data.csv")
+#f <- file.choose()
+df1 = read.csv("award_dataa.csv")
 df2 = df1[df1$Program == "SBIR", ] %>%
   select(c("Company",	
-           "Award.Title",	
+           "AwardTitle",	
            "Agency",
-           "Proposal.Award.Date",	
-           "Contract.End.Date",	
-           "Award.Year",	
-           "Award.Amount",
-           "Socially.and.Economically.Disadvantaged",
-           "Women.Owned",
-           "Number.Employees",
+           "ProposalAwardDate",	
+           "ContractEndDate",	
+           "AwardYear",	
+           "AwardAmount",
+           "SociallyandEconomicallyDisadvantaged",
+           "WomenOwned",
+           "NumberEmployees",
            "State",	
            "Zip",
            "Abstract"))
 df = na.omit(df2)
 
-df$Award.Amount <- gsub(",", "", df$Award.Amount)
-df$Award.Amount <- as.numeric(df$Award.Amount)
+df$AwardAmount <- gsub(",", "", df$AwardAmount)
+df$AwardAmount <- as.numeric(df$AwardAmount)
 
 row.has.na <- apply(df, 1, function(x){any(is.na(x))})
 df_final <- df[!row.has.na,]
@@ -124,10 +129,10 @@ df_final <- df[!row.has.na,]
 
 ```{r 2, fig.height=10, fig.width=10, cache = TRUE}
 
-award_amount <- ddply(df_final, c("Agency"), summarize, Award.Amount = sum(Award.Amount))
+award_amount <- ddply(df_final, c("Agency"), summarize, AwardAmount = sum(AwardAmount))
 award_amount = award_amount[-1,]
 
-p = ggplot(award_amount, aes(Agency, Award.Amount/1000000000, fill = Agency)) + geom_col(position = "dodge")+
+p = ggplot(award_amount, aes(Agency, AwardAmount/1000000000, fill = Agency)) + geom_col(position = "dodge")+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
           
 p + xlab("Agency")+ ylab("Award Amount in Billions")+ labs(fill = "Agency")
@@ -177,7 +182,7 @@ topfeatures(award_dfm, 10)
 
 ```{r 4, fig.width=10, fig.height=5,cache=TRUE}
 
-award_tstat_key <- textstat_keyness(award_dfm, target = award_dfm$Award.Year < 1990 )
+award_tstat_key <- textstat_keyness(award_dfm, target = award_dfm$AwardYear < 1990 )
 textplot_keyness(award_tstat_key, n=10, min_count = 10)
 
 ```
@@ -348,7 +353,7 @@ kable(Doc_prob, caption = "Topic probabilties for documents")
 
 ## Findings:
 
-**From this model, we can presume that given any award abstract, the probability of it belonging to the _Automobile_ sector is the highest followed by _Space_, _Biotechnology_, _Optics_' and _Pharmacy_**
+**From this model, we can presume that given any award abstract, the probability of it belonging to the _Space Technology_ sector is the highest followed by _Biotechnology_, _Automobile_, _Optics_, and _Pharmacy_**
 
 ---
 
@@ -367,10 +372,10 @@ stm_award_dfm$documents, stm_award_dfm$vocab, stm_award_dfm$meta)
 
 award_tmob_stm <- stm(
 out$documents, out$vocab, K=3,
-prevalence = ~s(Award.Year),
+prevalence = ~s(AwardYear),
 data=out$meta,
 init.type= "Spectral",
-max.em.its=50,
+max.em.its=30,
 seed=123)
 
 ```
@@ -408,15 +413,15 @@ topicQuality(award_tmob_stm, out$documents)
 
 ## Findings:
 
-* From the data, dividing the documents in 3 groups is the most optimal to form groups of tokens.
+* From the data, dividing the documents in _3_ groups is the most optimal to form groups of tokens.
 
-* Topic 1 has high exclusivity, Topic 2 has high semantic coherence and topic 3 has _both_ high semantic coherence and exclusivity.
+* Topic 1 has low exclusivity and coherence, Topic 3 has moderate exclusivity and coherence and topic 2 has _both_ high exclusivity and semantic coherence.
 
 ---
 
 ## Model 3 - keyATM Base Model:
 
-**Here we use the dictionary created abovd and keep 2 no-keyword topics.**
+**Here we use the dictionary created above and keep 2 no-keyword topics.**
 
 ```{r 13,cache=TRUE }
 award2_dfm = dfm_subset(award_dfm,ntoken(award_dfm)>0)
@@ -431,6 +436,8 @@ award_tmod_keyatm_base <- keyATM(  docs = keyATM_docs,
 ```
 
 #### Top 5 words in our 5 topics and system-generated 2 topics:
+
+```{r 14, cache=TRUE}
 top_words(award_tmod_keyatm_base, 5)
 
 ```
@@ -450,7 +457,7 @@ top_words(award_tmod_keyatm_base, 5)
 
 > California has almost always been the top state with respect to most number of awards won in a year
 
-> Our dictionary suggests that out of the major industries and sectors present, any award has more probability to belong to a company in the _automobile_ industry
+> Our dictionary suggests that out of the major industries and sectors present, any award has more probability to belong to a company in the _Space Technology_ industry
 
 ---
 
