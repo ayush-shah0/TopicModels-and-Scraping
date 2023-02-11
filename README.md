@@ -1,5 +1,5 @@
 # R-Projects
-Sample R codes for CIS8045 assignments and projects
+Sample R codes for GSU CIS8045 assignments and projects
 
 Assignment 1 - using xml to parse content
 
